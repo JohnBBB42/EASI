@@ -1,3 +1,12 @@
+#_________________________________________
+### Differential Pulse Voltametry (DPV)
+#_________________________________________
+
+class CustomValueError(Exception):
+    """Custom error for handling specific value errors."""
+    def __init__(self, message="An invalid value was provided."):
+        super().__init__(message)
+
 def Analysis_DPV(file_path, blank_responses=None):
     #_________________________________________
     # IMPORT PACKAGES
@@ -12,6 +21,8 @@ def Analysis_DPV(file_path, blank_responses=None):
     import matplotlib.ticker as mtick
     from sklearn.metrics import r2_score
     from sklearn.linear_model import LinearRegression
+    from matplotlib.pyplot import *
+    from scipy.optimize import curve_fit
     from collections import defaultdict
     from itertools import combinations
     from scipy.stats import t, linregress
