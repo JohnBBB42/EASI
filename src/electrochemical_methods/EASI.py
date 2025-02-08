@@ -18,8 +18,10 @@ import tkinter as tk
 from tkinter import Button, END, Entry, Label, LabelFrame, OptionMenu, StringVar, messagebox, Toplevel, filedialog
 import hashlib
 
-#from PIL import ImageTk, Image
-from EASI_Functions import Analysis_CV, Analysis_DPV, Analysis_EIS, Plots_all_imported
+from electrochemical_methods.Analysis_CV import Analysis_CV
+from electrochemical_methods.Analysis_DPV import Analysis_DPV
+from electrochemical_methods.Analysis_EIS import Analysis_EIS
+from electrochemical_methods.Plotting import Plots_all_imported
 
 
 #_____________________________
