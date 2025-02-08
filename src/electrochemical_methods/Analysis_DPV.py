@@ -2,34 +2,31 @@
 ### Differential Pulse Voltametry (DPV)
 #_________________________________________
 
+import os
+import re
+import sys
+import csv
+import pylab as p
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
+from sklearn.metrics import r2_score
+from sklearn.linear_model import LinearRegression
+from matplotlib.pyplot import *
+from scipy.optimize import curve_fit
+from collections import defaultdict
+from itertools import combinations
+from scipy.stats import t, linregress
+from scipy.signal import find_peaks, savgol_filter
+from scipy import sparse
+from scipy.sparse.linalg import spsolve
+
 class CustomValueError(Exception):
     """Custom error for handling specific value errors."""
     def __init__(self, message="An invalid value was provided."):
         super().__init__(message)
 
 def Analysis_DPV(file_path, blank_responses=None):
-    #_________________________________________
-    # IMPORT PACKAGES
-    #_________________________________________
-    import os
-    import re
-    import sys
-    import csv
-    import pylab as p
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as mtick
-    from sklearn.metrics import r2_score
-    from sklearn.linear_model import LinearRegression
-    from matplotlib.pyplot import *
-    from scipy.optimize import curve_fit
-    from collections import defaultdict
-    from itertools import combinations
-    from scipy.stats import t, linregress
-    from scipy.signal import find_peaks, savgol_filter
-    from scipy import sparse
-    from scipy.sparse.linalg import spsolve
-
     #_________________________________________
     # DEFINE FUNCTIONS
     #_________________________________________
@@ -45,7 +42,7 @@ def Analysis_DPV(file_path, blank_responses=None):
             metadata_row = lines[index].strip()
             metadata_row = re.sub(r'^Metadata row: ', '', metadata_row)
             metadata_entries = metadata_row.split(',,')
-            
+
             # Clean each metadata entry by removing everything after 'DPV'
             cleaned_metadata_entries = []
             missing_parts = []

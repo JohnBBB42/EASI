@@ -7,12 +7,12 @@ def Analysis_CV(values_row_start_get, x_column_get,y_column_get,scan_column_get,
     import sys
     import pylab as p
     import numpy as np
-    from basics import Load_data, Table, getFilepath
+    from electrochemical_methods.basics import Load_data, Table, getFilepath
     import matplotlib.pyplot as plt
     import matplotlib.ticker as mtick
     from sklearn.metrics import r2_score
     from sklearn.linear_model import LinearRegression
-    
+
     #_________________________________________
     #_________________________________________
     # VARIABLES

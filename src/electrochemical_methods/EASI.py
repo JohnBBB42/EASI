@@ -17,6 +17,9 @@ sys.path.append(dname)
 import tkinter as tk
 from tkinter import Button, END, Entry, Label, LabelFrame, OptionMenu, StringVar, messagebox, Toplevel, filedialog
 import hashlib
+from PIL import Image
+from matplotlib import pyplot as plt
+import numpy as np
 
 from electrochemical_methods.Analysis_CV import Analysis_CV
 from electrochemical_methods.Analysis_DPV import Analysis_DPV
@@ -32,12 +35,12 @@ class CVApp:
         self.master = master
         master.title('CV analysis')
         master.geometry("500x400")
-        
+
         # Drop down boxes
         self.options = ["CV-analysis"]
         self.clicked = StringVar()
         self.clicked.set(self.options[0])
-        
+
         # Make frame
         self.frame = LabelFrame(master,text="Select analysis", height=5, width=5)
         self.frame.grid(row=0,column=1)
@@ -143,7 +146,7 @@ class CVApp:
         Label(self.master, text=str(Text),width = width).grid(row=row)
         E = Entry(self.master)
         E.insert(END,str(default_input))
-        E.grid(row=row, column=column) 
+        E.grid(row=row, column=column)
         return E
 
     def change(self, *args):
@@ -164,8 +167,8 @@ class CVApp:
     #_____________________________
     # Save input in entry boxes and function for run-command
     #_____________________________
-    
-    def onclick(self,*args): 
+
+    def onclick(self,*args):
         self.variable1_get = self.variable1.get()
         self.variable2_get = self.variable2.get()
         self.variable3_get = self.variable3.get()
@@ -196,7 +199,6 @@ import tkinter as tk
 from tkinter import Button, END, Label, LabelFrame, OptionMenu, StringVar, Toplevel, filedialog, messagebox
 from PIL import Image
 from matplotlib import pyplot as plt
-from EASI_Functions import Analysis_DPV  # Assuming the function is defined in myfunctions module
 import numpy as np
 
 
@@ -1367,18 +1369,18 @@ class MainApp:
         master.geometry("550x300")
 
         headline_font = tk.font.Font(family="Helvetica", size=18, weight="bold")
-        
+
         self.header_frame = tk.Frame(master)
         self.header_frame.grid(row=0, column=0, columnspan=2, padx=20, pady=10, sticky="w")
 
         self.headline = Label(self.header_frame, text="EASI", font=headline_font)
         self.headline.pack(side="right")
 
-        logo_path = r"C:\Users\Jonat\Desktop\Electrochemical Analysis Software Interface(EASI)\LOGO.gif"
-        self.logo_image = tk.PhotoImage(file=logo_path)
-        self.logo_image = self.logo_image.subsample(15, 15)
-        self.logo_label = Label(self.header_frame, image=self.logo_image)
-        self.logo_label.pack(side="left", padx=10)
+#        logo_path = r"C:\Users\Jonat\Desktop\Electrochemical Analysis Software Interface(EASI)\LOGO.gif"
+#        self.logo_image = tk.PhotoImage(file=logo_path)
+#        self.logo_image = self.logo_image.subsample(15, 15)
+#        self.logo_label = Label(self.header_frame, image=self.logo_image)
+#        self.logo_label.pack(side="left", padx=10)
 
         self.content_frame = tk.Frame(master)
         self.content_frame.grid(row=1, column=0, columnspan=2, sticky="nw")
@@ -1399,7 +1401,7 @@ class MainApp:
 
         self.open_cv_button = Button(self.button_frame, text=" Open CV Analysis ", command=self.open_cv)
         self.open_cv_button.grid(row=0, column=0, pady=5)
-        
+
         self.open_dpv_button = Button(self.button_frame, text="Open DPV Analysis", command=lambda: self.open_dpv(master))
         self.open_dpv_button.grid(row=1, column=0, pady=5)
 

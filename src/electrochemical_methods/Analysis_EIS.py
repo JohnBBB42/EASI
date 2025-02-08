@@ -13,7 +13,7 @@ def Analysis_EIS(values_row_start_get, x_column_get,y_column_get,x_start_get, x_
     import matplotlib.ticker as mtick
     from sklearn.metrics import r2_score
     from sklearn.linear_model import LinearRegression
-    from basics import getFilepath, Load_data, Table
+    from electrochemical_methods.basics import getFilepath, Load_data, Table
     
     #_________________________________________
     #_________________________________________
