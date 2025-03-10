@@ -1,8 +1,8 @@
-### electrochemical_methods
+# Electrochemical_methods
 
 Electrochemical program for data analysis
 
-## to do
+## To do
 - amperometry
 - create better user interfae
 - better saving of results
