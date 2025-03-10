@@ -66,18 +66,43 @@ class CVApp:
 
     def run_analysis(self):
         option = self.clicked.get()
+        if not self.filepath:
+            messagebox.showwarning("No File", "Please select a file first.")
+            return
+        
         if option == "CV Analysis":
-            if self.filepath:
-                # Collect parameters (e.g., through your entry boxes) and run Analysis_CV
-                self.analysis_results = Analysis_CV(...)  # fill with params
-            else:
-                messagebox.showwarning("No File", "Please select a file first.")
+            # Default parameters for user-friendliness
+            values_row_start = 2  # Assuming header is row 1
+            potential_col = 1
+            current_col = 2
+            scan_col = 0
+            scan_number = "1"
+            linreg_start_index = "15"
+            r2_accept_value = "0.90"
+            potential_unit = "V"
+            current_unit = "A"
+            num_decimals = "3"
+    
+            # Automatically run analysis with these defaults
+            self.analysis_results = Analysis_CV(
+                values_row_start,
+                potential_col,
+                current_col,
+                scan_col,
+                scan_number,
+                linreg_start_index,
+                r2_accept_value,
+                potential_unit,
+                current_unit,
+                num_decimals
+            )
+    
+            messagebox.showinfo("Analysis Complete", "CV analysis has been performed successfully!")
+    
         elif option == "Custom CV Plotting":
-            if self.filepath:
-                # Logic from Custom_Plot_App goes here
-                self.analysis_results = Plots_all_imported(...)  # fill with params
-            else:
-                messagebox.showwarning("No File", "Please select a file first.")
+            # For custom plotting, ask user explicitly or have defaults
+            self.analysis_results = Plots_all_imported(...)
+
 
     def save_results(self):
         if self.analysis_results:
