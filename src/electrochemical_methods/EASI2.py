@@ -28,6 +28,79 @@ from electrochemical_methods.Analysis_EIS import Analysis_EIS
 from electrochemical_methods.Plotting import Plots_all_imported
 
 
+def choose_columns(df):
+    """
+    Display a dialog that lists the columns of df
+    and let the user pick which columns are potential/current/scan.
+    Returns a tuple: (potential_col, current_col, scan_col or None).
+    """
+    import tkinter as tk
+    from tkinter import ttk
+
+    # Create a temporary Toplevel
+    win = tk.Toplevel()
+    win.title("Select Columns")
+
+    # We'll store user picks in these variables
+    potential_var = tk.StringVar()
+    current_var   = tk.StringVar()
+    scan_var      = tk.StringVar(value="None")  # default
+
+    columns = list(df.columns)
+    columns_str = [str(c) for c in columns]  # we could show column names (if you have named columns)
+
+    # Potential column
+    tk.Label(win, text="Select Potential Column:").pack(pady=2)
+    combo_pot = ttk.Combobox(win, textvariable=potential_var, values=columns_str, state="readonly")
+    combo_pot.pack(pady=2)
+
+    # Current column
+    tk.Label(win, text="Select Current Column:").pack(pady=2)
+    combo_cur = ttk.Combobox(win, textvariable=current_var, values=columns_str, state="readonly")
+    combo_cur.pack(pady=2)
+
+    # Scan column (optional)
+    tk.Label(win, text="Select Scan Column (optional):").pack(pady=2)
+    combo_scan = ttk.Combobox(win, textvariable=scan_var, values=["None"] + columns_str, state="readonly")
+    combo_scan.pack(pady=2)
+
+    # We'll store the result in a dict closure
+    result = {"pot": None, "cur": None, "scan": None}
+
+    def confirm():
+        # user picks
+        pot_str = potential_var.get()
+        cur_str = current_var.get()
+        scan_str= scan_var.get()
+
+        if not pot_str or not cur_str:
+            tk.messagebox.showwarning("Missing Columns", "Please select at least potential and current columns.")
+            return
+
+        # figure out the integer index
+        pot_col = columns_str.index(pot_str)
+        cur_col = columns_str.index(cur_str)
+
+        if scan_str != "None":
+            scan_col = columns_str.index(scan_str)
+        else:
+            scan_col = None
+
+        result["pot"]  = pot_col
+        result["cur"]  = cur_col
+        result["scan"] = scan_col
+
+        win.destroy()  # close the Toplevel
+
+    tk.Button(win, text="Confirm", command=confirm).pack(pady=10)
+
+    # Wait for user to close the Toplevel
+    win.grab_set()  
+    win.mainloop()  
+
+    return result["pot"], result["cur"], result["scan"]
+
+
 #_____________________________
 # GUI setup
 #_____________________________
@@ -37,6 +110,7 @@ class CVApp:
         master.title('CV Analysis')
         master.geometry("400x600")
 
+        self.df = None              # We'll store the loaded DataFrame here
         self.filepath = None
         self.analysis_results = None
 
@@ -66,27 +140,42 @@ class CVApp:
         )
         if self.filepath:
             self.file_label.config(text=self.filepath)
+            # Load the file into self.df
+            try:
+                if self.filepath.lower().endswith(".csv"):
+                    self.df = pd.read_csv(self.filepath)
+                else:
+                    self.df = pd.read_excel(self.filepath)
+            except Exception as e:
+                messagebox.showerror("File Error", f"Could not read file: {e}")
+                self.df = None
 
     def run_analysis(self):
-        if not self.filepath:
-            messagebox.showwarning("No File", "Please select a file first.")
+        if self.df is None:
+            messagebox.showwarning("No Data", "Please import a valid file first.")
             return
 
-        df = pd.read_csv(self.filepath) if self.filepath.endswith('.csv') else pd.read_excel(self.filepath)
+        # which analysis user selected
+        selected_option = self.clicked.get()
 
-        if self.clicked.get() == "CV Analysis":
+        if selected_option == "CV Analysis":
             try:
+                # Step 1: Let user pick columns
+                pot_idx, cur_idx, scan_idx = choose_columns(self.df)
+                # pot_idx, cur_idx, scan_idx are zero-based integers, or scan_idx is None
+
+                # Step 2: Ask user for a saving folder
                 saving_folder = filedialog.askdirectory(title="Select folder to save results")
                 if not saving_folder:
-                    messagebox.showwarning("No Folder", "Please select a folder to save results.")
+                    messagebox.showwarning("No Folder", "No folder selected, analysis canceled.")
                     return
 
+                # Step 3: Call your Analysis_CV
                 self.analysis_results = Analysis_CV(
-                    df,
-                    values_row_start=2,
-                    potential_column=1,
-                    current_column=2,
-                    scan_column=0,
+                    df=self.df,
+                    potential_col=pot_idx,
+                    current_col=cur_idx,
+                    scan_col=scan_idx,
                     scan_number=1,
                     linreg_start_index=15,
                     r2_accept_value=0.90,
@@ -99,20 +188,19 @@ class CVApp:
             except Exception as e:
                 messagebox.showerror("Analysis Error", f"An error occurred: {e}")
 
-        elif self.clicked.get() == "Custom CV Plotting":
+        elif selected_option == "Custom CV Plotting":
             messagebox.showinfo("Info", "Custom plotting feature not yet implemented.")
 
     def save_results(self):
         if self.analysis_results:
-            save_dir = filedialog.askdirectory()
+            save_dir = filedialog.askdirectory(title="Select folder to copy the results")
             if save_dir:
-                plot_path = self.analysis_results['plot_path']
-                new_plot_path = os.path.join(save_dir, os.path.basename(plot_path))
-                os.rename(plot_path, new_plot_path)
-                messagebox.showinfo("Saved", f"Results saved to {new_plot_path}")
+                old_path = self.analysis_results['plot_path']
+                new_path = os.path.join(save_dir, os.path.basename(old_path))
+                os.rename(old_path, new_path)
+                messagebox.showinfo("Saved", f"Plot saved to {new_path}")
         else:
             messagebox.showwarning("No Results", "Run analysis first.")
-
 
 
 class EISApp:
