@@ -117,18 +117,18 @@ class CVApp:
             # or row_start=2 if we want to skip the first row, etc.
             # Adjust as needed. For now, we'll do row_start=1 if your data starts on row 1.
             Analysis_CV(
-                df=self.df,
-                values_row_start=1,   # if your data's first row is actually data
-                potential_column=pot_col,
-                current_column=cur_col,
-                scan_column=scan_col,
-                scan_number=1,
+                df=loaded_df,           # DataFrame you already read
+                values_row_start=2,     # skip the header row
+                potential_column=1,     # A
+                current_column=3,       # C
+                scan_column=5,          # E
+                scan_number=1,          # must be an actual scan number in col E
                 linreg_start_index=15,
                 r2_accept_value=0.90,
                 potential_unit="V",
                 current_unit="A",
                 num_decimals=3,
-                saving_folder=saving_folder
+                saving_folder="."
             )
 
             messagebox.showinfo("Success", "CV analysis completed successfully!")
