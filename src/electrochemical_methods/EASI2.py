@@ -117,7 +117,7 @@ class CVApp:
             # or row_start=2 if we want to skip the first row, etc.
             # Adjust as needed. For now, we'll do row_start=1 if your data starts on row 1.
             Analysis_CV(
-                df=loaded_df,           # DataFrame you already read
+                df=self.df,             # DataFrame you already read
                 values_row_start=2,     # skip the header row
                 potential_column=1,     # A
                 current_column=3,       # C
