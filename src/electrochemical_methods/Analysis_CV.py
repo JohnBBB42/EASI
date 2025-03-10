@@ -8,7 +8,7 @@ import matplotlib.ticker as mtick
 from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression
 
-ddef Analysis_CV(
+def Analysis_CV(
     df,
     values_row_start=2,
     potential_column=1,
