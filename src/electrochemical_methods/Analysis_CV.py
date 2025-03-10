@@ -1,114 +1,90 @@
-def Analysis_CV(values_row_start_get, x_column_get,y_column_get,scan_column_get,scan_number_get,
-                LinReg_start_index_get,R2_accept_value_get,potential_unit, current_unit, num_decimals): 
-    #_________________________________________
-    # IMPORT PACKAGES
-    #_________________________________________
-    import os
-    import sys
-    import pylab as p
-    import numpy as np
-    from electrochemical_methods.basics import Load_data, Table, getFilepath
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as mtick
-    from sklearn.metrics import r2_score
-    from sklearn.linear_model import LinearRegression
+import os
+import sys
+import pylab as p
+import numpy as np
+from electrochemical_methods.basics import Load_data, Table, getFilepath
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
+from sklearn.metrics import r2_score
+from sklearn.linear_model import LinearRegression
 
-    #_________________________________________
-    #_________________________________________
-    # VARIABLES
-    #_________________________________________
-    values_row_start = int(values_row_start_get) #Check EIS/ECS excel file,
-                         #if values start from 3rd row
-                         #then values_row_start = 3
-    scan_column = int(scan_column_get) #Check CV excel file, 
-                    #if scan column don't exist then scan_column = 0. 
-                    #If it is in first column, then scan_column = 1
-    Scan_number = int(scan_number_get) #only if scan_column exist
-                    #value is out of influence, if scan_column doesn't exist
+def Analysis_CV(df, values_row_start, potential_column, current_column, scan_column,
+                scan_number, linreg_start_index, r2_accept_value, potential_unit,
+                current_unit, num_decimals, saving_folder):
     
-    potential_column = int(x_column_get) #Check CV excel file, 
-                       #if potential values in first column, then potential_column = 1
-    current_column = int(y_column_get) #Check CV excel file, 
-                       #if current values in second column, then current_column = 2
-    potential_unit = str(potential_unit)
-    current_unit = str(current_unit)
-    
-    num_decimals = int(num_decimals) #number of decimals to round numbers
-    font_size = 14 #font size for labels
-    LinReg_start_index = int(LinReg_start_index_get) #how many indexes away from start and end point before regression is made
-    R2_accept_value = float(R2_accept_value_get) #limit for how good linear reression must be
+    df = df.iloc[values_row_start-1:].copy()
+    df.columns = range(df.shape[1])  # reset columns to integers for simplicity
 
-    #_________________________________________
-    # DEFINE FUNCTIONS
-    #_________________________________________
-    
+    if scan_column > 0:
+        df = df[df[scan_column-1] == scan_number].reset_index(drop=True)
 
-    def Peak_finder(Data, LinReg_start_index, R2_accept_value, Scan_number): 
-        #Find index of upper and lower peak
-        upperPeak_index = Data.iloc[:,1].idxmax()
-        lowerPeak_index = Data.iloc[:,1].idxmin()
-    
-        x_upperPeak = Data.iloc[upperPeak_index,0] #x_value of peak
-        y_upperPeak = Data.iloc[upperPeak_index,1] #y_value of peak
-        x_lowerPeak = Data.iloc[lowerPeak_index,0]
-        y_lowerPeak = Data.iloc[lowerPeak_index,1]
-        
-        #Find index of min and max potential
-        min_potential = Data.iloc[:,0].idxmin()
-        max_potential = Data.iloc[:,0].idxmax()
-        final_index = Data.iloc[:,0].shape[0] #total nr. of indexes
-        
-        #If upperPeak is not found, then regression baseline is made on 100 indexes from max potential
-        if upperPeak_index == max_potential:
-            x_lin1 = np.array(Data.iloc[max_potential+LinReg_start_index:max_potential+100,0]).reshape(-1,1)
-            y_lin1 = np.array(Data.iloc[max_potential+LinReg_start_index:max_potential+100,1]).reshape(-1,1)    
-            fit1 = LinearRegression() 
-            fit1.fit(x_lin1, y_lin1)
-            y_pred1 = fit1.intercept_ + fit1.coef_[0]*Data.iloc[:,0]
-        #Otherwise, best linear regression is found in the interval from peak to max potential
-        #For each time the R2 value is below 0.90, then 5 indexes will be removed in the interval for regression
-        else:    
-            step_1 = np.arange(0,2*max_potential-upperPeak_index,5)
-            step_1 = step_1[::-1]
-            
-            #define x- and y-data for linear regression
-            for i in step_1:
-                x_lin1 = np.array(Data.iloc[max_potential+LinReg_start_index:i,0]).reshape(-1,1)
-                y_lin1 = np.array(Data.iloc[max_potential+LinReg_start_index:i,1]).reshape(-1,1)    
-                fit1 = LinearRegression() 
-                fit1.fit(x_lin1, y_lin1) #make linear fit
-                y_pred1 = fit1.intercept_ + fit1.coef_[0]*Data.iloc[:,0] #define linear function on form y=b+ax
-                R2_1_score = r2_score(y_lin1.reshape(1,-1)[0],y_pred1[max_potential+LinReg_start_index:i].to_numpy()) #R^2 value
-                if R2_1_score > R2_accept_value: #R^2 must be greater than R2_accept_value
-                    break
-        
-        #If lowerPeak is not found, then regression baseline is made on 100 indexes from min potential
-        if lowerPeak_index == min_potential:
-            x_lin2 = np.array(Data.iloc[min_potential+LinReg_start_index:min_potential+100,0]).reshape(-1,1)
-            y_lin2 = np.array(Data.iloc[min_potential+LinReg_start_index:min_potential+100,1]).reshape(-1,1)
-            fit2 = LinearRegression() 
-            fit2.fit(x_lin2, y_lin2)
-            y_pred2 = fit2.intercept_ + fit2.coef_[0]*Data.iloc[:,0]
-        #Otherwise, best linear regression is found in the interval from peak to min potential
-        #For each time the R2 value is below 0.90, then 5 indexes will be removed in the interval for regression
-        else:
-            step_2 = np.arange(0,min_potential+final_index-lowerPeak_index,5)
-            step_2 = step_2[::-1]
-            for i in step_2:    
-                x_lin2 = np.array(Data.iloc[min_potential+LinReg_start_index:i,0]).reshape(-1,1)
-                y_lin2 = np.array(Data.iloc[min_potential+LinReg_start_index:i,1]).reshape(-1,1)
-                fit2 = LinearRegression() 
-                fit2.fit(x_lin2, y_lin2)
-                y_pred2 = fit2.intercept_ + fit2.coef_[0]*Data.iloc[:,0]
-                R2_2_score = r2_score(y_lin2.reshape(1,-1)[0],y_pred2[min_potential+LinReg_start_index:i].to_numpy())
-                if R2_2_score > R2_accept_value:
-                    break
-        #Define the regression baselines
-        y_upperPeak_baseline = y_pred1[upperPeak_index]
-        y_lowerPeak_baseline = y_pred2[lowerPeak_index]
-        
-        return y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_upperPeak_baseline, y_lowerPeak_baseline
-        
+    font_size = 14
+
+    def Peak_finder(Data):
+        upperPeak_index = Data.iloc[:, 1].idxmax()
+        lowerPeak_index = Data.iloc[:, 1].idxmin()
+
+        x_upperPeak = Data.iloc[upperPeak_index, 0]
+        y_upperPeak = Data.iloc[upperPeak_index, 1]
+        x_lowerPeak = Data.iloc[lowerPeak_index, 0]
+        y_lowerPeak = Data.iloc[lowerPeak_index, 1]
+
+        min_potential = Data.iloc[:, 0].idxmin()
+        max_potential = Data.iloc[:, 0].idxmax()
+        final_index = Data.shape[0]
+
+        def baseline(idx_peak, idx_extreme):
+            if idx_peak == idx_extreme:
+                x_lin = Data.iloc[idx_extreme+linreg_start_index:idx_extreme+100, 0].values.reshape(-1, 1)
+                y_lin = Data.iloc[idx_extreme+linreg_start_index:idx_extreme+100, 1].values.reshape(-1, 1)
+            else:
+                x_lin = Data.iloc[min(idx_peak, idx_extreme)+linreg_start_index:max(idx_peak, idx_extreme), 0].values.reshape(-1, 1)
+                y_lin = Data.iloc[min(idx_peak, idx_extreme)+linreg_start_index:max(idx_peak, idx_extreme), 1].values.reshape(-1, 1)
+
+            fit = LinearRegression()
+            fit.fit(x_lin, y_lin)
+            y_pred = fit.intercept_ + fit.coef_[0]*Data.iloc[:, 0]
+            return y_pred
+
+        y_pred1 = baseline(upperPeak_index, max_potential)
+        y_pred2 = baseline(lowerPeak_index, min_potential)
+
+        return y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_pred1[upperPeak_index], y_pred2[lowerPeak_index]
+
+    y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_upper_baseline, y_lower_baseline = Peak_finder(df)
+
+    fig, ax = plt.subplots()
+    ax.plot(df.iloc[:, 0], df.iloc[:, 1], label=f'Scan: {scan_number}')
+    ax.plot(df.iloc[:, 0], y_pred1, color="green")
+    ax.plot(df.iloc[:, 0], y_pred2, color="grey")
+
+    ax.arrow(x_upperPeak, y_upperPeak, 0, y_upper_baseline-y_upperPeak, color="green",
+             head_width=0.02, head_length=0.02)
+    ax.arrow(x_lowerPeak, y_lowerPeak, 0, y_lower_baseline-y_lowerPeak, color="grey",
+             head_width=0.02, head_length=0.02)
+
+    ax.set_xlabel(f"Potential ({potential_unit})", fontsize=font_size)
+    ax.set_ylabel(f"Current ({current_unit})", fontsize=font_size)
+    ax.set_title(f"Cyclic Voltammetry\nOxidation peak: E_pa={x_upperPeak:.{num_decimals}g}{potential_unit}, i_pa={(y_upperPeak - y_upper_baseline):.{num_decimals}g}{current_unit}\n"
+                 f"Reduction peak: E_pc={x_lowerPeak:.{num_decimals}g}{potential_unit}, i_pc={(y_lowerPeak - y_lower_baseline):.{num_decimals}g}{current_unit}", fontsize=font_size)
+
+    plt.legend()
+    plt.tight_layout()
+    plot_path = os.path.join(saving_folder, f'CV_analysis_scan_{scan_number}.pdf')
+    plt.savefig(plot_path)
+    plt.show()
+
+    results = {
+        "E_pa": x_upperPeak,
+        "E_pc": x_lowerPeak,
+        "E_diff": abs(x_upperPeak - x_lowerPeak),
+        "i_pa": y_upperPeak - y_upper_baseline,
+        "i_pc": y_lowerPeak - y_lower_baseline,
+        "plot_path": plot_path
+    }
+
+    return results
+
         
     def CV_plot(filename, Data, number_decimals, y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_upperPeak_baseline, y_lowerPeak_baseline):
         num_dec = '.'+'%s'% +num_decimals+'g'
