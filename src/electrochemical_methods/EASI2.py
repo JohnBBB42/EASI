@@ -29,191 +29,111 @@ from electrochemical_methods.Analysis_EIS import Analysis_EIS
 from electrochemical_methods.Plotting import Plots_all_imported
 
 
-def choose_columns(df):
-    """
-    Display a dialog that lists the columns of df
-    and let the user pick which columns are potential/current/scan.
-    Returns a tuple: (potential_col, current_col, scan_col or None).
-    'potential_col', 'current_col', and 'scan_col' are zero-based indices
-    that match df.columns.
-    """
-    win = tk.Toplevel()
-    win.title("Select Columns")
-
-    potential_var = tk.StringVar()
-    current_var   = tk.StringVar()
-    scan_var      = tk.StringVar(value="None")  # default
-
-    columns = list(df.columns)         # e.g. [0, 1, 2, ...] if no headers
-    columns_str = [str(c) for c in columns]  # We display them as strings
-
-    # Potential column
-    tk.Label(win, text="Select Potential Column:").pack(pady=2)
-    combo_pot = ttk.Combobox(win, textvariable=potential_var,
-                             values=columns_str, state="readonly")
-    combo_pot.pack(pady=2)
-
-    # Current column
-    tk.Label(win, text="Select Current Column:").pack(pady=2)
-    combo_cur = ttk.Combobox(win, textvariable=current_var,
-                             values=columns_str, state="readonly")
-    combo_cur.pack(pady=2)
-
-    # Scan column (optional)
-    tk.Label(win, text="Select Scan Column (optional):").pack(pady=2)
-    combo_scan = ttk.Combobox(win, textvariable=scan_var,
-                              values=["None"] + columns_str, state="readonly")
-    combo_scan.pack(pady=2)
-
-    # Store the result in a dict closure
-    result = {"pot": None, "cur": None, "scan": None}
-
-    def confirm():
-        pot_str  = potential_var.get()
-        cur_str  = current_var.get()
-        scan_str = scan_var.get()
-
-        if not pot_str or not cur_str:
-            tk.messagebox.showwarning("Missing Columns",
-                                      "Please select at least potential and current columns.")
-            return
-
-        # figure out the integer index
-        pot_col  = columns_str.index(pot_str)
-        cur_col  = columns_str.index(cur_str)
-        scan_col = None
-        if scan_str != "None":
-            scan_col = columns_str.index(scan_str)
-
-        result["pot"]  = pot_col
-        result["cur"]  = cur_col
-        result["scan"] = scan_col
-
-        win.destroy()  # close the Toplevel
-
-    tk.Button(win, text="Confirm", command=confirm).pack(pady=10)
-
-    # block until user closes
-    win.grab_set()
-    win.mainloop()
-
-    return result["pot"], result["cur"], result["scan"]
-
-
 class CVApp:
     def __init__(self, master):
         self.master = master
-        master.title('CV Analysis')
-        master.geometry("500x400")
+        master.title("CV Analysis")
+        master.geometry("500x300")
 
-        self.df = None         # We'll store the loaded DataFrame here
+        self.df = None                # We'll store the loaded DataFrame here
         self.filepath = None
-        self.analysis_results = None
 
-        # Dropdown options
-        self.options = ["CV Analysis", "Custom CV Plotting"]
+        # Dropdown for future expansions
+        self.options = ["CV Analysis"]
         self.clicked = StringVar(value=self.options[0])
 
-        # Frame for the dropdown
-        self.frame = LabelFrame(master, text="Select Analysis")
-        self.frame.pack(padx=10, pady=10, fill="x")
-        OptionMenu(self.frame, self.clicked, *self.options).pack(fill="x")
+        frame = LabelFrame(master, text="Select Analysis")
+        frame.pack(padx=10, pady=10, fill="x")
+        OptionMenu(frame, self.clicked, *self.options).pack(fill="x")
 
-        # Import file
-        Button(master, text="Import File", command=self.import_file).pack(pady=10)
+        Button(master, text="Import File", command=self.import_file).pack(pady=5)
         self.file_label = Label(master, text="No file selected")
         self.file_label.pack(pady=5)
 
-        # Run analysis
-        Button(master, text="Run Analysis", command=self.run_analysis).pack(pady=10)
-
-        # Save results (if needed)
-        Button(master, text="Save Results", command=self.save_results).pack(pady=10)
+        Button(master, text="Run Analysis", command=self.run_analysis).pack(pady=5)
 
     def import_file(self):
         """
-        User picks a single CSV or Excel file. We load it into self.df exactly once.
+        Prompt user for a single CSV or Excel, load into self.df exactly once.
+        No headers are assumed. If your file has a header row, adjust as needed.
         """
         self.filepath = filedialog.askopenfilename(
             filetypes=[("CSV files", "*.csv"), ("Excel files", "*.xlsx;*.xls")]
         )
-        if self.filepath:
-            self.file_label.config(text=self.filepath)
-            try:
-                if self.filepath.lower().endswith(".csv"):
-                    self.df = pd.read_csv(self.filepath, header=None)
-                else:
-                    self.df = pd.read_excel(self.filepath, header=None)
-            except Exception as e:
-                messagebox.showerror("File Error", f"Could not read file: {e}")
-                self.df = None
+        if not self.filepath:
+            return
+
+        self.file_label.config(text=self.filepath)
+
+        # Attempt to load
+        try:
+            if self.filepath.lower().endswith(".csv"):
+                # If the file actually has a header row, remove 'header=None'
+                self.df = pd.read_csv(self.filepath, header=None)
+            else:
+                self.df = pd.read_excel(self.filepath, header=None)
+        except Exception as e:
+            messagebox.showerror("File Error", f"Could not read file: {e}")
+            self.df = None
 
     def run_analysis(self):
         """
-        Called when user clicks 'Run Analysis'.
-        1) Ensure we have self.df
-        2) Let user pick columns
-        3) Prompt for saving folder
-        4) Run Analysis_CV
+        Called when user clicks 'Run Analysis':
+          1) Check if df is loaded
+          2) Auto-detect columns
+          3) Ask user for a folder to save all results
+          4) Call analysis
         """
-        if self.df is None:
+        if self.df is None or self.df.empty:
             messagebox.showwarning("No Data", "Please import a valid file first.")
             return
 
-        selected_option = self.clicked.get()
+        # Step 1: Auto-detect columns
+        # We'll do a simple approach:
+        #  - If df has at least 2 columns: col0=Potential, col1=Current
+        #  - If df has ≥3 columns, we assume col2=Scan
+        #  - Otherwise, error
+        num_cols = self.df.shape[1]
+        if num_cols < 2:
+            messagebox.showerror("Column Error", "Data must have at least 2 columns.")
+            return
 
-        if selected_option == "CV Analysis":
-            try:
-                # Let user pick columns (zero-based)
-                pot_idx, cur_idx, scan_idx = choose_columns(self.df)
+        pot_col = 1  # 1-based index for Analysis_CV
+        cur_col = 2
+        scan_col= 0  # default = 0 means 'no scan column used'
 
-                # Let user pick save folder
-                saving_folder = filedialog.askdirectory(
-                    title="Select folder to save results"
-                )
-                if not saving_folder:
-                    messagebox.showwarning("No Folder", "No folder selected, analysis canceled.")
-                    return
+        if num_cols >= 3:
+            scan_col = 3  # 1-based index if we see there's a 3rd column
 
-                # Example usage: We call Analysis_CV once
-                self.analysis_results = Analysis_CV(
-                    df=self.df,
-                    values_row_start=2,        # user might change this if header is row 1
-                    potential_column=pot_idx+1,# +1 because function is using 1-based columns
-                    current_column=cur_idx+1,
-                    scan_column=(scan_idx+1 if scan_idx is not None else 0),
-                    scan_number=1,
-                    linreg_start_index=15,
-                    r2_accept_value=0.90,
-                    potential_unit="V",
-                    current_unit="A",
-                    num_decimals=3,
-                    saving_folder=saving_folder
-                )
+        # Step 2: Ask user for a saving folder
+        saving_folder = filedialog.askdirectory(title="Select folder to save results")
+        if not saving_folder:
+            messagebox.showwarning("No Folder", "No folder selected, analysis canceled.")
+            return
 
-                messagebox.showinfo("Success", "CV analysis completed successfully!")
-            except Exception as e:
-                messagebox.showerror("Analysis Error", f"An error occurred: {e}")
+        # Step 3: Call the Analysis_CV function
+        try:
+            # We'll pass the loaded df, plus we tell it row_start=1 if there's no header
+            # or row_start=2 if we want to skip the first row, etc.
+            # Adjust as needed. For now, we'll do row_start=1 if your data starts on row 1.
+            Analysis_CV(
+                df=self.df,
+                values_row_start=1,   # if your data's first row is actually data
+                potential_column=pot_col,
+                current_column=cur_col,
+                scan_column=scan_col,
+                scan_number=1,
+                linreg_start_index=15,
+                r2_accept_value=0.90,
+                potential_unit="V",
+                current_unit="A",
+                num_decimals=3,
+                saving_folder=saving_folder
+            )
 
-        elif selected_option == "Custom CV Plotting":
-            messagebox.showinfo("Info", "Custom plotting feature not yet implemented.")
-
-    def save_results(self):
-        """
-        If your Analysis_CV returns a dictionary with 'plot_path', you can let the user
-        copy that file to a new directory. If your multi-file approach generates many PDF
-        files, you may need a more advanced method. For now we demonstrate a single path:
-        """
-        if self.analysis_results and "plot_path" in self.analysis_results:
-            plot_path = self.analysis_results["plot_path"]
-            save_dir = filedialog.askdirectory(title="Select folder to copy the results")
-            if save_dir:
-                new_path = os.path.join(save_dir, os.path.basename(plot_path))
-                os.rename(plot_path, new_path)
-                messagebox.showinfo("Saved", f"Plot saved to {new_path}")
-        else:
-            messagebox.showwarning("No Results",
-                                   "No or incomplete analysis results found. Run analysis first.")
+            messagebox.showinfo("Success", "CV analysis completed successfully!")
+        except Exception as e:
+            messagebox.showerror("Analysis Error", f"An error occurred: {e}")
 
 
 class EISApp:
