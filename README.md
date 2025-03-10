@@ -6,6 +6,7 @@ Electrochemical program for data analysis
 - amperometry
 - create better user interfae
 - better saving of results
+- EIS and CV automatic parameters
 
 Created using [mlops_template](https://github.com/SkafteNicki/mlops_template),
 a [cookiecutter template](https://github.com/cookiecutter/cookiecutter) for getting
