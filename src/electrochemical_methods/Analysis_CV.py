@@ -9,12 +9,12 @@ from sklearn.metrics import r2_score
 from sklearn.linear_model import LinearRegression
 
 def Analysis_CV(
-    df,
-    values_row_start=2,
-    potential_column=1,
-    current_column=2,
-    scan_column=0,
-    scan_number=1,
+    df=loaded_df,           # DataFrame you already read
+    values_row_start=2,     # skip the header row
+    potential_column=1,     # A
+    current_column=3,       # C
+    scan_column=5,          # E
+    scan_number=1,          # must be an actual scan number in col E
     linreg_start_index=15,
     r2_accept_value=0.90,
     potential_unit="V",
