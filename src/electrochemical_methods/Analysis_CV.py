@@ -20,76 +20,76 @@ def Analysis_CV(df, values_row_start, potential_column, current_column, scan_col
 
     font_size = 14
 
-def Peak_finder(Data):
-    upperPeak_index = Data.iloc[:, 1].idxmax()
-    lowerPeak_index = Data.iloc[:, 1].idxmin()
-
-    x_upperPeak = Data.iloc[upperPeak_index, 0]
-    y_upperPeak = Data.iloc[upperPeak_index, 1]
-    x_lowerPeak = Data.iloc[lowerPeak_index, 0]
-    y_lowerPeak = Data.iloc[lowerPeak_index, 1]
-
-    min_potential = Data.iloc[:, 0].idxmin()
-    max_potential = Data.iloc[:, 0].idxmax()
-
-    def safe_baseline(idx_peak, idx_extreme):
-        start_idx = min(idx_peak, idx_extreme) + linreg_start_index
-        end_idx = min(max(idx_peak, idx_extreme), len(Data)-1)
-
-        # Ensure safe indices
-        start = min(start_index, Data.shape[0]-1)
-        end = min(idx_extreme + 100, Data.shape[0]-1)
-
-        if start >= end:
-            start, end = idx_extreme, Data.shape[0]-1
-
-        x_lin = Data.iloc[start:end, 0].values.reshape(-1,1)
-        y_lin = Data.iloc[start:end, 1].values.reshape(-1,1)
-
-        fit = LinearRegression()
-        fit.fit(x_lin, y_lin)
-        y_pred = fit.intercept_ + fit.coef_[0] * Data.iloc[:, 0]
-
-        return y_pred
-
-    y_pred1 = safe_baseline(upperPeak_index, max_potential)
-    y_pred2 = safe_baseline(lowerPeak_index, min_potential)
-
-    return y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_pred1[upperPeak_index], y_pred2[lowerPeak_index]
-
-    y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_upper_baseline, y_lower_baseline = Peak_finder(df)
-
-    fig, ax = plt.subplots()
-    ax.plot(df.iloc[:, 0], df.iloc[:, 1], label=f'Scan: {scan_number}')
-    ax.plot(df.iloc[:, 0], y_pred1, color="green")
-    ax.plot(df.iloc[:, 0], y_pred2, color="grey")
-
-    ax.arrow(x_upperPeak, y_upperPeak, 0, y_upper_baseline-y_upperPeak, color="green",
-             head_width=0.02, head_length=0.02)
-    ax.arrow(x_lowerPeak, y_lowerPeak, 0, y_lower_baseline-y_lowerPeak, color="grey",
-             head_width=0.02, head_length=0.02)
-
-    ax.set_xlabel(f"Potential ({potential_unit})", fontsize=font_size)
-    ax.set_ylabel(f"Current ({current_unit})", fontsize=font_size)
-    ax.set_title(f"Cyclic Voltammetry\nOxidation peak: E_pa={x_upperPeak:.{num_decimals}g}{potential_unit}, i_pa={(y_upperPeak - y_upper_baseline):.{num_decimals}g}{current_unit}\n"
-                 f"Reduction peak: E_pc={x_lowerPeak:.{num_decimals}g}{potential_unit}, i_pc={(y_lowerPeak - y_lower_baseline):.{num_decimals}g}{current_unit}", fontsize=font_size)
-
-    plt.legend()
-    plt.tight_layout()
-    plot_path = os.path.join(saving_folder, f'CV_analysis_scan_{scan_number}.pdf')
-    plt.savefig(plot_path)
-    plt.show()
-
-    results = {
-        "E_pa": x_upperPeak,
-        "E_pc": x_lowerPeak,
-        "E_diff": abs(x_upperPeak - x_lowerPeak),
-        "i_pa": y_upperPeak - y_upper_baseline,
-        "i_pc": y_lowerPeak - y_lower_baseline,
-        "plot_path": plot_path
-    }
-
-    return results
+    def Peak_finder(Data):
+        upperPeak_index = Data.iloc[:, 1].idxmax()
+        lowerPeak_index = Data.iloc[:, 1].idxmin()
+    
+        x_upperPeak = Data.iloc[upperPeak_index, 0]
+        y_upperPeak = Data.iloc[upperPeak_index, 1]
+        x_lowerPeak = Data.iloc[lowerPeak_index, 0]
+        y_lowerPeak = Data.iloc[lowerPeak_index, 1]
+    
+        min_potential = Data.iloc[:, 0].idxmin()
+        max_potential = Data.iloc[:, 0].idxmax()
+    
+        def safe_baseline(idx_peak, idx_extreme):
+            start_idx = min(idx_peak, idx_extreme) + linreg_start_index
+            end_idx = min(max(idx_peak, idx_extreme), len(Data)-1)
+    
+            # Ensure safe indices
+            start = min(start_index, Data.shape[0]-1)
+            end = min(idx_extreme + 100, Data.shape[0]-1)
+    
+            if start >= end:
+                start, end = idx_extreme, Data.shape[0]-1
+    
+            x_lin = Data.iloc[start:end, 0].values.reshape(-1,1)
+            y_lin = Data.iloc[start:end, 1].values.reshape(-1,1)
+    
+            fit = LinearRegression()
+            fit.fit(x_lin, y_lin)
+            y_pred = fit.intercept_ + fit.coef_[0] * Data.iloc[:, 0]
+    
+            return y_pred
+    
+        y_pred1 = safe_baseline(upperPeak_index, max_potential)
+        y_pred2 = safe_baseline(lowerPeak_index, min_potential)
+    
+        return y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_pred1[upperPeak_index], y_pred2[lowerPeak_index]
+    
+        y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_upper_baseline, y_lower_baseline = Peak_finder(df)
+    
+        fig, ax = plt.subplots()
+        ax.plot(df.iloc[:, 0], df.iloc[:, 1], label=f'Scan: {scan_number}')
+        ax.plot(df.iloc[:, 0], y_pred1, color="green")
+        ax.plot(df.iloc[:, 0], y_pred2, color="grey")
+    
+        ax.arrow(x_upperPeak, y_upperPeak, 0, y_upper_baseline-y_upperPeak, color="green",
+                 head_width=0.02, head_length=0.02)
+        ax.arrow(x_lowerPeak, y_lowerPeak, 0, y_lower_baseline-y_lowerPeak, color="grey",
+                 head_width=0.02, head_length=0.02)
+    
+        ax.set_xlabel(f"Potential ({potential_unit})", fontsize=font_size)
+        ax.set_ylabel(f"Current ({current_unit})", fontsize=font_size)
+        ax.set_title(f"Cyclic Voltammetry\nOxidation peak: E_pa={x_upperPeak:.{num_decimals}g}{potential_unit}, i_pa={(y_upperPeak - y_upper_baseline):.{num_decimals}g}{current_unit}\n"
+                     f"Reduction peak: E_pc={x_lowerPeak:.{num_decimals}g}{potential_unit}, i_pc={(y_lowerPeak - y_lower_baseline):.{num_decimals}g}{current_unit}", fontsize=font_size)
+    
+        plt.legend()
+        plt.tight_layout()
+        plot_path = os.path.join(saving_folder, f'CV_analysis_scan_{scan_number}.pdf')
+        plt.savefig(plot_path)
+        plt.show()
+    
+        results = {
+            "E_pa": x_upperPeak,
+            "E_pc": x_lowerPeak,
+            "E_diff": abs(x_upperPeak - x_lowerPeak),
+            "i_pa": y_upperPeak - y_upper_baseline,
+            "i_pc": y_lowerPeak - y_lower_baseline,
+            "plot_path": plot_path
+        }
+    
+        return results
 
         
     def CV_plot(filename, Data, number_decimals, y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_upperPeak_baseline, y_lowerPeak_baseline):
