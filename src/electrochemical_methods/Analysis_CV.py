@@ -20,36 +20,42 @@ def Analysis_CV(df, values_row_start, potential_column, current_column, scan_col
 
     font_size = 14
 
-    def Peak_finder(Data):
-        upperPeak_index = Data.iloc[:, 1].idxmax()
-        lowerPeak_index = Data.iloc[:, 1].idxmin()
+def Peak_finder(Data):
+    upperPeak_index = Data.iloc[:, 1].idxmax()
+    lowerPeak_index = Data.iloc[:, 1].idxmin()
 
-        x_upperPeak = Data.iloc[upperPeak_index, 0]
-        y_upperPeak = Data.iloc[upperPeak_index, 1]
-        x_lowerPeak = Data.iloc[lowerPeak_index, 0]
-        y_lowerPeak = Data.iloc[lowerPeak_index, 1]
+    x_upperPeak = Data.iloc[upperPeak_index, 0]
+    y_upperPeak = Data.iloc[upperPeak_index, 1]
+    x_lowerPeak = Data.iloc[lowerPeak_index, 0]
+    y_lowerPeak = Data.iloc[lowerPeak_index, 1]
 
-        min_potential = Data.iloc[:, 0].idxmin()
-        max_potential = Data.iloc[:, 0].idxmax()
-        final_index = Data.shape[0]
+    min_potential = Data.iloc[:, 0].idxmin()
+    max_potential = Data.iloc[:, 0].idxmax()
 
-        def baseline(idx_peak, idx_extreme):
-            if idx_peak == idx_extreme:
-                x_lin = Data.iloc[idx_extreme+linreg_start_index:idx_extreme+100, 0].values.reshape(-1, 1)
-                y_lin = Data.iloc[idx_extreme+linreg_start_index:idx_extreme+100, 1].values.reshape(-1, 1)
-            else:
-                x_lin = Data.iloc[min(idx_peak, idx_extreme)+linreg_start_index:max(idx_peak, idx_extreme), 0].values.reshape(-1, 1)
-                y_lin = Data.iloc[min(idx_peak, idx_extreme)+linreg_start_index:max(idx_peak, idx_extreme), 1].values.reshape(-1, 1)
+    def safe_baseline(idx_peak, idx_extreme):
+        start_idx = min(idx_peak, idx_extreme) + linreg_start_index
+        end_idx = min(max(idx_peak, idx_extreme), len(Data)-1)
 
-            fit = LinearRegression()
-            fit.fit(x_lin, y_lin)
-            y_pred = fit.intercept_ + fit.coef_[0]*Data.iloc[:, 0]
-            return y_pred
+        # Ensure safe indices
+        start = min(start_index, Data.shape[0]-1)
+        end = min(idx_extreme + 100, Data.shape[0]-1)
 
-        y_pred1 = baseline(upperPeak_index, max_potential)
-        y_pred2 = baseline(lowerPeak_index, min_potential)
+        if start >= end:
+            start, end = idx_extreme, Data.shape[0]-1
 
-        return y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_pred1[upperPeak_index], y_pred2[lowerPeak_index]
+        x_lin = Data.iloc[start:end, 0].values.reshape(-1,1)
+        y_lin = Data.iloc[start:end, 1].values.reshape(-1,1)
+
+        fit = LinearRegression()
+        fit.fit(x_lin, y_lin)
+        y_pred = fit.intercept_ + fit.coef_[0] * Data.iloc[:, 0]
+
+        return y_pred
+
+    y_pred1 = safe_baseline(upperPeak_index, max_potential)
+    y_pred2 = safe_baseline(lowerPeak_index, min_potential)
+
+    return y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_pred1[upperPeak_index], y_pred2[lowerPeak_index]
 
     y_pred1, y_pred2, x_upperPeak, y_upperPeak, x_lowerPeak, y_lowerPeak, y_upper_baseline, y_lower_baseline = Peak_finder(df)
 
