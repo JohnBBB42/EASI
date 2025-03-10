@@ -37,6 +37,7 @@ class CVApp:
         master.geometry("400x600")
 
         self.filepath = None
+        self.analysis_results = None
 
         # Dropdown options
         self.options = ["CV Analysis", "Custom CV Plotting"]
@@ -55,7 +56,7 @@ class CVApp:
         # Run analysis
         Button(master, text="Run Analysis", command=self.run_analysis).pack(pady=10)
 
-        # Save results placeholder
+        # Save results
         Button(master, text="Save Results", command=self.save_results).pack(pady=10)
 
     def import_file(self):
@@ -70,38 +71,47 @@ class CVApp:
             messagebox.showwarning("No File", "Please select a file first.")
             return
 
+        df = pd.read_csv(self.filepath) if self.filepath.endswith('.csv') else pd.read_excel(self.filepath)
+
         if self.clicked.get() == "CV Analysis":
             try:
-                # Call your Analysis_CV directly (it loads the file itself)
-                Analysis_CV(
-                    values_row_start_get=2,
-                    x_column_get=1,
-                    y_column_get=2,
-                    scan_column_get=0,
-                    scan_number_get=1,
-                    LinReg_start_index_get=15,
-                    R2_accept_value_get=0.90,
+                saving_folder = filedialog.askdirectory(title="Select folder to save results")
+                if not saving_folder:
+                    messagebox.showwarning("No Folder", "Please select a folder to save results.")
+                    return
+
+                self.analysis_results = Analysis_CV(
+                    df,
+                    values_row_start=2,
+                    potential_column=1,
+                    current_column=2,
+                    scan_column=0,
+                    scan_number=1,
+                    linreg_start_index=15,
+                    r2_accept_value=0.90,
                     potential_unit="V",
                     current_unit="A",
-                    num_decimals=3
+                    num_decimals=3,
+                    saving_folder=saving_folder
                 )
                 messagebox.showinfo("Success", "CV analysis completed successfully!")
             except Exception as e:
                 messagebox.showerror("Analysis Error", f"An error occurred: {e}")
-    
-        elif option == "Custom CV Plotting":
-            # For custom plotting, ask user explicitly or have defaults
-            self.analysis_results = Plots_all_imported(...)
 
+        elif self.clicked.get() == "Custom CV Plotting":
+            messagebox.showinfo("Info", "Custom plotting feature not yet implemented.")
 
     def save_results(self):
         if self.analysis_results:
             save_dir = filedialog.askdirectory()
             if save_dir:
-                # logic to save results, similar to DPVApp
-                pass
+                plot_path = self.analysis_results['plot_path']
+                new_plot_path = os.path.join(save_dir, os.path.basename(plot_path))
+                os.rename(plot_path, new_plot_path)
+                messagebox.showinfo("Saved", f"Results saved to {new_plot_path}")
         else:
             messagebox.showwarning("No Results", "Run analysis first.")
+
 
 
 class EISApp:
