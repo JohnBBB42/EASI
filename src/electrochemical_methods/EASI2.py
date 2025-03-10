@@ -37,9 +37,8 @@ class CVApp:
         master.geometry("400x600")
 
         self.filepath = None
-        self.analysis_results = None
 
-        # Dropdown options for CV app
+        # Dropdown options
         self.options = ["CV Analysis", "Custom CV Plotting"]
         self.clicked = StringVar(value=self.options[0])
 
@@ -48,56 +47,47 @@ class CVApp:
         self.frame.pack(padx=10, pady=10, fill="x")
         OptionMenu(self.frame, self.clicked, *self.options).pack(fill="x")
 
-        # Import file button
+        # File import
         Button(master, text="Import File", command=self.import_file).pack(pady=10)
         self.file_label = Label(master, text="No file selected")
         self.file_label.pack(pady=5)
 
-        # Run analysis button
+        # Run analysis
         Button(master, text="Run Analysis", command=self.run_analysis).pack(pady=10)
 
-        # Save results button
+        # Save results placeholder
         Button(master, text="Save Results", command=self.save_results).pack(pady=10)
 
     def import_file(self):
-        self.filepath = filedialog.askopenfilename(filetypes=[("CSV", "*.csv"), ("Excel", "*.xlsx;*.xls")])
+        self.filepath = filedialog.askopenfilename(
+            filetypes=[("CSV files", "*.csv"), ("Excel files", "*.xlsx;*.xls")]
+        )
         if self.filepath:
             self.file_label.config(text=self.filepath)
 
     def run_analysis(self):
-        option = self.clicked.get()
         if not self.filepath:
             messagebox.showwarning("No File", "Please select a file first.")
             return
-        
-        if option == "CV Analysis":
-            # Default parameters for user-friendliness
-            values_row_start = 2  # Assuming header is row 1
-            potential_col = 1
-            current_col = 2
-            scan_col = 0
-            scan_number = "1"
-            linreg_start_index = "15"
-            r2_accept_value = "0.90"
-            potential_unit = "V"
-            current_unit = "A"
-            num_decimals = "3"
-    
-            # Automatically run analysis with these defaults
-            self.analysis_results = Analysis_CV(
-                values_row_start,
-                potential_col,
-                current_col,
-                scan_col,
-                scan_number,
-                linreg_start_index,
-                r2_accept_value,
-                potential_unit,
-                current_unit,
-                num_decimals
-            )
-    
-            messagebox.showinfo("Analysis Complete", "CV analysis has been performed successfully!")
+
+        if self.clicked.get() == "CV Analysis":
+            try:
+                # Call your Analysis_CV directly (it loads the file itself)
+                Analysis_CV(
+                    values_row_start_get=2,
+                    x_column_get=1,
+                    y_column_get=2,
+                    scan_column_get=0,
+                    scan_number_get=1,
+                    LinReg_start_index_get=15,
+                    R2_accept_value_get=0.90,
+                    potential_unit="V",
+                    current_unit="A",
+                    num_decimals=3
+                )
+                messagebox.showinfo("Success", "CV analysis completed successfully!")
+            except Exception as e:
+                messagebox.showerror("Analysis Error", f"An error occurred: {e}")
     
         elif option == "Custom CV Plotting":
             # For custom plotting, ask user explicitly or have defaults
