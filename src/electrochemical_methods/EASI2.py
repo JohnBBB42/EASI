@@ -141,10 +141,9 @@ class EISApp:
         master.title("EIS Analysis")
         master.geometry("500x300")
 
-        self.df = None         # We'll store the loaded DataFrame here
+        self.df = None
         self.filepath = None
 
-        # Single drop-down option for now
         self.options = ["EIS Analysis"]
         self.clicked = StringVar(value=self.options[0])
 
@@ -152,18 +151,16 @@ class EISApp:
         frame.pack(padx=10, pady=10, fill="x")
         OptionMenu(frame, self.clicked, *self.options).pack(fill="x")
 
-        # Import file button
         Button(master, text="Import File", command=self.import_file).pack(pady=5)
         self.file_label = Label(master, text="No file selected")
         self.file_label.pack(pady=5)
 
-        # Run analysis button
         Button(master, text="Run Analysis", command=self.run_analysis).pack(pady=5)
 
     def import_file(self):
         """
-        User picks a single CSV or Excel. We load it into self.df exactly once.
-        No repeated textboxes for columns. If there's a header row, remove 'header=None' or adjust.
+        User picks a single CSV or Excel. We assume the first row has headers,
+        so we do header=0. If your data uses commas as decimals, add decimal=','.
         """
         self.filepath = filedialog.askopenfilename(
             filetypes=[("CSV files", "*.csv"), ("Excel files", "*.xlsx;*.xls")]
@@ -174,9 +171,11 @@ class EISApp:
         self.file_label.config(text=self.filepath)
         try:
             if self.filepath.lower().endswith(".csv"):
-                self.df = pd.read_csv(self.filepath, header=None)
+                # If your decimals are normal dots, no change needed.
+                # If your decimals are commas, you might do: decimal=','
+                self.df = pd.read_csv(self.filepath, header=0)
             else:
-                self.df = pd.read_excel(self.filepath, header=None)
+                self.df = pd.read_excel(self.filepath, header=0)
         except Exception as e:
             messagebox.showerror("File Error", f"Could not read file: {e}")
             self.df = None
@@ -185,36 +184,43 @@ class EISApp:
         if self.df is None or self.df.empty:
             messagebox.showwarning("No Data", "Please import a valid file first.")
             return
-    
-        # Possibly auto-detect columns or let user pick
-        # Example: col1=Z_R, col2=Z_Im
-        z_r_col = 1
-        z_im_col= 2
-    
-        saving_folder = filedialog.askdirectory(title="Select folder to save EIS results")
-        if not saving_folder:
-            messagebox.showwarning("No folder", "Analysis canceled.")
-            return
-    
-        try:
-            result = Analysis_EIS(
-                df=self.df,
-                values_row_start=2,  # if you skip row 1
-                real_col=z_r_col,
-                imag_col=z_im_col,
-                x_start=None,
-                x_end=None,
-                y_start=None,
-                y_end=None,
-                unit="Ω",
-                circle_pt1_index=0,
-                circle_pt2_index=0,
-                saving_folder=saving_folder
-            )
-            messagebox.showinfo("Success", f"EIS analysis done. Plot at {result['plot_path']}")
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
 
+        selected_option = self.clicked.get()
+        if selected_option == "EIS Analysis":
+            try:
+                saving_folder = filedialog.askdirectory(title="Select folder to save EIS results")
+                if not saving_folder:
+                    messagebox.showwarning("No folder", "Analysis canceled.")
+                    return
+
+                # Suppose from your data screenshot:
+                #   Column A: Index
+                #   Column B: Frequency
+                #   Column C: Z' (Ω)
+                #   Column D: -Z'' (Ω)
+                #   ...
+                # That means: real_col=3, imag_col=4 (1-based indices).
+                # If your actual data starts on row 2 (since row 1 was headers),
+                # often you do values_row_start=1 or 2 depending on how you want to skip rows.
+                # Try values_row_start=1 if your data is now row 0-based after header=0.
+
+                result = Analysis_EIS(
+                    df=self.df,
+                    values_row_start=1,   # Don't skip any additional lines now that header=0
+                    real_col=3,           # If Z' is the 3rd column in 1-based indexing
+                    imag_col=4,           # If -Z'' is the 4th column
+                    x_start=None,
+                    x_end=None,
+                    y_start=None,
+                    y_end=None,
+                    unit="Ω",
+                    circle_pt1_index=0,
+                    circle_pt2_index=0,
+                    saving_folder=saving_folder
+                )
+                messagebox.showinfo("Success", f"EIS analysis done. Plot at {result['plot_path']}")
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
 
 class Custom_Plot_App:
     def __init__(self,master):
