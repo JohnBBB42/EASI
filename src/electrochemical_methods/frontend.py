@@ -71,25 +71,48 @@ def run_cv_analysis(df):
 ##############################################
 # EIS Analysis
 ##############################################
-def run_eis_analysis(df):
+def run_eis_analysis():
     st.write("## EIS Analysis")
-
-    # If df is None or empty, warn and return
-    if df is None or df.empty:
-        st.warning("No EIS data loaded. Please go back and upload a valid file.")
+    
+    # 1) Let the user upload a CSV or Excel file
+    uploaded_file = st.file_uploader("Upload EIS data (CSV or Excel)", type=["csv", "xlsx", "xls"])
+    if not uploaded_file:
+        st.info("Please upload a file to continue.")
         return
 
-    # Let user specify a saving folder
+    # 2) Read the file with header=0 (like your Tkinter version)
+    try:
+        if uploaded_file.name.lower().endswith(".csv"):
+            df = pd.read_csv(uploaded_file, header=0)
+        else:
+            df = pd.read_excel(uploaded_file, header=0)
+    except Exception as e:
+        st.error(f"Could not read file: {e}")
+        return
+
+    # 3) Convert the Real (Z') and Imag (-Z'') columns to numeric.
+    # We assume these are in the 3rd and 4th columns (1-based indexing).
+    real_idx = 3 - 1  # zero-based index for column 3
+    imag_idx = 4 - 1  # zero-based index for column 4
+    try:
+        # Convert columns to string, replace commas with dots, then convert to float.
+        df.iloc[:, real_idx] = pd.to_numeric(df.iloc[:, real_idx].astype(str).str.replace(',', '.'), errors='raise')
+        df.iloc[:, imag_idx] = pd.to_numeric(df.iloc[:, imag_idx].astype(str).str.replace(',', '.'), errors='raise')
+    except Exception as conv_err:
+        st.error(f"Error converting columns to numeric: {conv_err}")
+        return
+
+    # 4) Let the user specify a folder path for saving results (optional)
     saving_folder = st.text_input("Saving Folder Path", value=".")
 
+    # 5) When the user clicks the button, run the EIS Analysis using the same defaults as your Tkinter version.
     if st.button("Run EIS Analysis"):
         try:
-            # EXACT same defaults as your Tkinter example:
             result = Analysis_EIS(
                 df=df,
-                values_row_start=1,   
-                real_col=3,          
-                imag_col=4,          
+                values_row_start=1,   # No extra lines skipped beyond header=0
+                real_col=3,           # Real part (Z') is the 3rd column (1-based)
+                imag_col=4,           # Imaginary part (-Z'') is the 4th column (1-based)
                 x_start=None,
                 x_end=None,
                 y_start=None,
@@ -106,6 +129,7 @@ def run_eis_analysis(df):
                 st.write("Check your output folder for saved PDF plots.")
         except Exception as e:
             st.error(f"Error during EIS Analysis: {e}")
+
 
 ##############################################
 # DPV Analysis
