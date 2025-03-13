@@ -133,12 +133,13 @@ def run_dpv_analysis():
     blank_file = st.file_uploader("Upload a Blank Responses File (Optional)", type=["csv","xlsx","xls"])
     
     if uploaded_file is not None:
-        # Save the uploaded DPV file to a temporary file (Analysis_DPV expects a file path)
+        # 1) Save the uploaded DPV file to a temp file (Analysis_DPV expects a file path)
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[-1])
         tfile.write(uploaded_file.getvalue())
         tfile.close()
         file_path = tfile.name
         
+        # 2) Handle optional blank file
         if blank_file is not None:
             tbfile = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(blank_file.name)[-1])
             tbfile.write(blank_file.getvalue())
@@ -147,20 +148,56 @@ def run_dpv_analysis():
         else:
             blank_path = None
         
+        # 3) When the user clicks the button, run the DPV analysis
         if st.button("Run DPV Analysis"):
             try:
-                # Call Analysis_DPV with or without the blank responses file
+                # Call Analysis_DPV with or without the blank responses
                 if blank_path:
-                    result = Analysis_DPV(file_path, blank_responses=blank_path)
+                    dpv_result = Analysis_DPV(file_path, blank_responses=blank_path)
                 else:
-                    result = Analysis_DPV(file_path)
+                    dpv_result = Analysis_DPV(file_path)
+                
                 st.success("DPV analysis completed successfully!")
-                st.write("Analysis Results:")
-                st.write(result)
+                
+                # 4) Display results in the same style as your old Tkinter app
+                st.write("### DPV Analysis Results")
+
+                if not dpv_result or not isinstance(dpv_result, dict):
+                    # If there's no structured dictionary, just show raw output
+                    st.warning("No structured results found. Showing raw output:")
+                    st.write(dpv_result)
+                    return
+                
+                # If the analysis returned a dictionary, let's format the main sections:
+                # (mean_peak_currents, std_peak_currents, cov_peak_currents, etc.)
+                
+                # Mean Peak Currents
+                if 'mean_peak_currents' in dpv_result:
+                    st.write("**Mean Peak Currents:**")
+                    for key, val in dpv_result['mean_peak_currents'].items():
+                        # key might be something like ('10uM', 'HX,Xan,UA'), val is a list of floats
+                        st.write(f"{key}: {val}")
+                
+                # Standard Deviation of Peak Currents
+                if 'std_peak_currents' in dpv_result:
+                    st.write("\n**Standard Deviation of Peak Currents:**")
+                    for key, val in dpv_result['std_peak_currents'].items():
+                        st.write(f"{key}: {val}")
+                
+                # Coefficient of Variation
+                if 'cov_peak_currents' in dpv_result:
+                    st.write("\n**Coefficient of Variation of Peak Currents:**")
+                    for key, val in dpv_result['cov_peak_currents'].items():
+                        st.write(f"{key}: {val}")
+                
+                # You can add more sections here if `Analysis_DPV` returns other data
+                # e.g. 'lod_results', 't_test_results', etc.
+
             except Exception as e:
                 st.error(f"Error during DPV Analysis: {e}")
     else:
         st.warning("Please upload a valid DPV data file.")
+
 
 ##############################################
 # Main Application Interface
