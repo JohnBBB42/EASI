@@ -73,11 +73,9 @@ def run_cv_analysis(df):
 ##############################################
 def run_eis_analysis():
     st.write("## EIS Analysis")
-    
-    # 1) Let the user upload a CSV or Excel file
-    uploaded_file = st.file_uploader("Upload EIS data (CSV or Excel)", type=["csv", "xlsx", "xls"])
+    uploaded_file = st.file_uploader("Upload EIS data...", type=["csv","xlsx","xls"])
     if not uploaded_file:
-        st.info("Please upload a file to continue.")
+        st.info("Please upload a file.")
         return
 
     # 2) Read the file with header=0 (like your Tkinter version)
