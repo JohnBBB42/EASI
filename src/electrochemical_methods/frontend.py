@@ -235,7 +235,6 @@ def run_dpv_analysis():
 
         with st.spinner("Running analysis..."):
             # Now pass dpv_df to your "analysis_dpv_streamlit" logic
-            from your_file_containing_analysis_dpv_streamlit import analysis_dpv_streamlit
             analysis_results = analysis_dpv_streamlit(dpv_df=dpv_df, blank_df=blank_df)
 
         if not analysis_results:
