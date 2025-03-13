@@ -36,7 +36,6 @@ def run_cv_analysis(df):
     st.write("### Step 1: Configure Analysis")
     values_row_start = st.number_input("values_row_start (skip lines)", value=2)
     potential_column = st.number_input("potential_column (1-based)", value=1)
-    # Updated defaults to match tkinter app
     current_column   = st.number_input("current_column (1-based)", value=3)
     scan_column      = st.number_input("scan_column (1-based, 0=none)", value=5)
     scan_number      = st.number_input("scan_number", value=1)
@@ -71,46 +70,44 @@ def run_cv_analysis(df):
 ##############################################
 # EIS Analysis
 ##############################################
-def run_eis_analysis():
+def run_eis_analysis(df):
+    """
+    Takes a DataFrame `df` that has already been uploaded/read
+    in the main function, then runs EIS analysis with the same
+    defaults as your Tkinter version. 
+    """
     st.write("## EIS Analysis")
-    uploaded_file = st.file_uploader("Upload EIS data...", type=["csv","xlsx","xls"])
-    if not uploaded_file:
-        st.info("Please upload a file.")
-        return
 
-    # 2) Read the file with header=0 (like your Tkinter version)
-    try:
-        if uploaded_file.name.lower().endswith(".csv"):
-            df = pd.read_csv(uploaded_file, header=0)
-        else:
-            df = pd.read_excel(uploaded_file, header=0)
-    except Exception as e:
-        st.error(f"Could not read file: {e}")
-        return
-
-    # 3) Convert the Real (Z') and Imag (-Z'') columns to numeric.
-    # We assume these are in the 3rd and 4th columns (1-based indexing).
+    # Convert the Real (Z') and Imag (Z'') columns to numeric
+    # if your data is in columns 3 and 4 (1-based).
     real_idx = 3 - 1  # zero-based index for column 3
     imag_idx = 4 - 1  # zero-based index for column 4
+
     try:
-        # Convert columns to string, replace commas with dots, then convert to float.
-        df.iloc[:, real_idx] = pd.to_numeric(df.iloc[:, real_idx].astype(str).str.replace(',', '.'), errors='raise')
-        df.iloc[:, imag_idx] = pd.to_numeric(df.iloc[:, imag_idx].astype(str).str.replace(',', '.'), errors='raise')
+        # Replace commas with dots, then convert to float.
+        df.iloc[:, real_idx] = pd.to_numeric(
+            df.iloc[:, real_idx].astype(str).str.replace(',', '.'),
+            errors='raise'
+        )
+        df.iloc[:, imag_idx] = pd.to_numeric(
+            df.iloc[:, imag_idx].astype(str).str.replace(',', '.'),
+            errors='raise'
+        )
     except Exception as conv_err:
         st.error(f"Error converting columns to numeric: {conv_err}")
         return
 
-    # 4) Let the user specify a folder path for saving results (optional)
+    # Let the user specify a folder path (optional)
     saving_folder = st.text_input("Saving Folder Path", value=".")
 
-    # 5) When the user clicks the button, run the EIS Analysis using the same defaults as your Tkinter version.
+    # Button to run the actual EIS Analysis
     if st.button("Run EIS Analysis"):
         try:
             result = Analysis_EIS(
                 df=df,
-                values_row_start=1,   # No extra lines skipped beyond header=0
-                real_col=3,           # Real part (Z') is the 3rd column (1-based)
-                imag_col=4,           # Imaginary part (-Z'') is the 4th column (1-based)
+                values_row_start=1,   # same as Tkinter default
+                real_col=3,           # 3rd column (1-based)
+                imag_col=4,           # 4th column (1-based)
                 x_start=None,
                 x_end=None,
                 y_start=None,
@@ -127,7 +124,6 @@ def run_eis_analysis():
                 st.write("Check your output folder for saved PDF plots.")
         except Exception as e:
             st.error(f"Error during EIS Analysis: {e}")
-
 
 ##############################################
 # DPV Analysis
@@ -166,8 +162,6 @@ def run_dpv_analysis():
                 st.error(f"Error during DPV Analysis: {e}")
     else:
         st.warning("Please upload a valid DPV data file.")
-
-
 
 ##############################################
 # Main Application Interface
@@ -218,6 +212,7 @@ def main():
     
     elif analysis_choice == "EIS Analysis":
         st.header("Electrochemical Impedance Spectroscopy (EIS) Analysis")
+        # Upload once here
         uploaded_file = st.file_uploader("Upload an EIS data file", type=["csv","xlsx","xls"])
         df = None
         if uploaded_file:
@@ -232,6 +227,7 @@ def main():
             except Exception as e:
                 st.error(f"Could not read EIS file: {e}")
                 df = None
+
         if df is not None and not df.empty:
             st.subheader("Configure & Run EIS Analysis")
             run_eis_analysis(df)
