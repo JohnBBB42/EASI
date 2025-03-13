@@ -94,11 +94,20 @@ def run_eis_analysis(df):
                 return float(s)
             except:
                 return None
+        
         x_s = parse_or_none(x_start)
         x_e = parse_or_none(x_end)
         y_s = parse_or_none(y_start)
         y_e = parse_or_none(y_end)
+
         try:
+            # Convert the chosen columns to numeric before analysis
+            real_idx = real_col - 1  # zero-based index for df
+            imag_idx = imag_col - 1
+            df.iloc[:, real_idx] = pd.to_numeric(df.iloc[:, real_idx], errors='coerce')
+            df.iloc[:, imag_idx] = pd.to_numeric(df.iloc[:, imag_idx], errors='coerce')
+
+            # Now call your EIS analysis
             result = Analysis_EIS(
                 df=df,
                 values_row_start=values_row_start,
