@@ -73,62 +73,52 @@ def run_cv_analysis(df):
 ##############################################
 def run_eis_analysis(df):
     st.write("## EIS Analysis")
-    values_row_start = st.number_input("values_row_start", value=1)
-    real_col         = st.number_input("real_col (1-based)", value=3)
-    imag_col         = st.number_input("imag_col (1-based)", value=4)
-    x_start          = st.text_input("x_start", "")
-    x_end            = st.text_input("x_end", "")
-    y_start          = st.text_input("y_start", "")
-    y_end            = st.text_input("y_end", "")
-    unit             = st.text_input("impedance_unit", value="Ω")
-    circle_pt1       = st.number_input("circle_point1_index", value=0)
-    circle_pt2       = st.number_input("circle_point2_index", value=0)
-    saving_folder    = st.text_input("Saving Folder Path", value=".")
-    
+    # 1) Let the user upload a CSV or Excel file
+    uploaded_file = st.file_uploader("Upload EIS data (CSV or Excel)", type=["csv","xlsx","xls"])
+    if not uploaded_file:
+        st.info("Please upload a file to continue.")
+        return
+
+    # 2) Read the file with header=0 (like your tkinter version)
+    #    If your decimals are commas, add `decimal=','`.
+    try:
+        if uploaded_file.name.lower().endswith(".csv"):
+            df = pd.read_csv(uploaded_file, header=0)
+        else:
+            df = pd.read_excel(uploaded_file, header=0)
+    except Exception as e:
+        st.error(f"Could not read file: {e}")
+        return
+
+    # 3) Let the user choose a folder path to save results (optional)
+    saving_folder = st.text_input("Saving Folder Path", value=".")
+
+    # 4) Button to run EIS Analysis with the same defaults as in your tkinter example
     if st.button("Run EIS Analysis"):
-        def parse_or_none(s):
-            s = s.strip()
-            if not s:
-                return None
-            try:
-                return float(s)
-            except:
-                return None
-        
-        x_s = parse_or_none(x_start)
-        x_e = parse_or_none(x_end)
-        y_s = parse_or_none(y_start)
-        y_e = parse_or_none(y_end)
-
         try:
-            # Convert the chosen columns to numeric before analysis
-            real_idx = real_col - 1  # zero-based index for df
-            imag_idx = imag_col - 1
-            df.iloc[:, real_idx] = pd.to_numeric(df.iloc[:, real_idx], errors='coerce')
-            df.iloc[:, imag_idx] = pd.to_numeric(df.iloc[:, imag_idx], errors='coerce')
-
-            # Now call your EIS analysis
+            # EXACT same arguments you used in tkinter:
             result = Analysis_EIS(
                 df=df,
-                values_row_start=values_row_start,
-                real_col=real_col,
-                imag_col=imag_col,
-                x_start=x_s,
-                x_end=x_e,
-                y_start=y_s,
-                y_end=y_e,
-                unit=unit,
-                circle_pt1_index=circle_pt1,
-                circle_pt2_index=circle_pt2,
+                values_row_start=1,   # skip no extra lines beyond the header=0
+                real_col=3,           # Z' in the 3rd column (1-based)
+                imag_col=4,           # -Z'' in the 4th column (1-based)
+                x_start=None,
+                x_end=None,
+                y_start=None,
+                y_end=None,
+                unit="Ω",
+                circle_pt1_index=0,
+                circle_pt2_index=0,
                 saving_folder=saving_folder
             )
             st.success("EIS Analysis completed successfully!")
             if isinstance(result, dict) and "plot_path" in result:
-                st.write(f"See your results in: {result['plot_path']}")
+                st.write(f"Plot saved at: {result['plot_path']}")
             else:
                 st.write("Check your output folder for saved PDF plots.")
         except Exception as e:
             st.error(f"Error during EIS Analysis: {e}")
+
 
 ##############################################
 # DPV Analysis
