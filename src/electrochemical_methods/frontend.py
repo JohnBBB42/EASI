@@ -148,8 +148,11 @@ def run_dpv_analysis():
         """
         import io
         content = dpv_file.getvalue()  # raw bytes
-        text = content.decode('utf-16-sig', errors='replace')  # *Key difference here*
+        text = content.decode('utf-16', errors='replace')
         lines = text.split('\n')
+
+        for i in range(len(lines)):
+            lines[i] = lines[i].lstrip('\ufeff')
         
         # find line that starts with V,µA
         header_line_index = None
