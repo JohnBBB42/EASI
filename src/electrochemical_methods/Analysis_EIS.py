@@ -1,261 +1,182 @@
 #_________________________________________
 # EIS ANALYSIS
 #_________________________________________
-def Analysis_EIS(values_row_start_get, x_column_get,y_column_get,x_start_get, x_end_get,
-                 y_start_get, y_end_get, unit,cir_pt1_index, cir_pt2_index):
-    #_________________________________________
-    # IMPORT PACKAGES
-    #_________________________________________
-    import os
-    import sys
+def Analysis_EIS(
+    df,
+    values_row_start=2,
+    real_col=1,
+    imag_col=2,
+    x_start=None,
+    x_end=None,
+    y_start=None,
+    y_end=None,
+    unit="Ω",
+    circle_pt1_index=0,
+    circle_pt2_index=0,
+    saving_folder="."
+):
+    """
+    Single-file EIS analysis:
+      1) 'df' is already loaded externally (no repeated Load_data).
+      2) 'values_row_start' to skip header rows if needed.
+      3) 'real_col','imag_col' => 1-based column indices (like your old code).
+      4) 'x_start','x_end','y_start','y_end' => optionally limit x/y axis.
+      5) 'circle_pt1_index','circle_pt2_index' => for circle fitting.
+      6) 'unit' => label for your impedance (Ω or something).
+      7) 'saving_folder' => a directory path where we save PDFs.
+
+    The function:
+      - Trims rows,
+      - Sorts df by real axis,
+      - Does circle fitting,
+      - Plots the single-file Nyquist,
+      - Creates the same style diameter bar chart (but for 1 file it won't show much).
+    """
+
+    import os, sys
     import numpy as np
     import matplotlib.pyplot as plt
     import matplotlib.ticker as mtick
     from sklearn.metrics import r2_score
     from sklearn.linear_model import LinearRegression
-    from electrochemical_methods.basics import getFilepath, Load_data, Table
-    
-    #_________________________________________
-    #_________________________________________
-    # VARIABLES
-    #_________________________________________
-    
-    Analysis = ["impedance",str(unit)]  #[method,unit] 
-                                  #method is "impedance" or "capacitance"
-                                  #unit is only used as label
-    #Analysis = ["capacitance","F"]
-    
-    values_row_start = int(values_row_start_get) #Check EIS/ECS excel file,
-                         #if values start from 2nd row
-                         #then values_row_start = 2
-    Real_column = int(x_column_get) #Check EIS/ECS excel file,
-                    #if Re(Z) or Re(C) values in third column, 
-                    #then Real_column = 3
-    Imag_column = int(y_column_get) #Check EIS/ECS excel file,
-                    #if Im(Z) or Im(C) values in fourth column, 
-                    #then Imag_column = 4 (assumed to be column of -Im(Z) or -Im(C))                              
-    if len(x_start_get)==0 or len(x_end_get)==0:
-        x_lim_plot = [ ]
+    from scipy.optimize import curve_fit
+    # If you rely on your local Table function:
+    # from electrochemical_methods.basics import Table
+
+    # 1) Decide the analysis type (impedance or capacitance)
+    Analysis = ["impedance", str(unit)]  # default
+
+    # 2) Convert your old variables
+    values_row_start = int(values_row_start)
+    Real_column      = int(real_col)
+    Imag_column      = int(imag_col)
+
+    # 3) Convert user-limits for x, y
+    def parse_limit(val_start, val_end):
+        if val_start is None or val_end is None or val_start == "" or val_end == "":
+            return []
+        return [float(val_start), float(val_end)]
+
+    x_lim_plot = parse_limit(x_start, x_end)
+    y_lim_plot = parse_limit(y_start, y_end)
+
+    # 4) Indices for circle fitting
+    cir_pt1_index = int(circle_pt1_index)
+    cir_pt2_index = int(circle_pt2_index)
+
+    num_decimals = 3
+    font_size    = 14
+
+    # 5) Trim the DataFrame, skip the first (values_row_start - 1) lines
+    df = df.iloc[values_row_start - 1:].copy()
+    df.columns = range(df.shape[1])  # rename columns to 0,1,2,..
+
+    # Real/Imag are now:
+    real_idx = Real_column - 1  # zero-based index
+    imag_idx = Imag_column - 1  # zero-based
+
+    # 6) Sort the DataFrame by Real axis
+    df.sort_values(by=df.columns[real_idx], inplace=True)
+
+    # 7) Optionally limit the data by x-limits
+    if len(x_lim_plot) == 2:
+        df = df[df.iloc[:, real_idx] > x_lim_plot[0]]
+        df = df[df.iloc[:, real_idx] < x_lim_plot[1]]
+
+    # 8) Circle + linear fit logic
+    #    We'll do it all for a single dataset now
+    sorted_data = df.reset_index(drop=True)
+    x_lin1 = sorted_data.iloc[:, real_idx]
+    y_lin1 = sorted_data.iloc[:, imag_idx]
+
+    # Because your old logic flips y to detect slope:
+    y_lin1_flipped = y_lin1[::-1]
+    slope_2 = np.gradient(y_lin1_flipped)
+    slope_2_index = np.where(np.round(slope_2,0) > -1)
+
+    print("Single File EIS Analysis")
+
+    if len(slope_2_index[0]) == 0:
+        # no slope found => entire circle?
+        circle_end_index = len(y_lin1_flipped)
+        print("No linear curve was found.")
     else:
-        x_lim_plot = [float(x_start_get),float(x_end_get)] # if empty [ ] => no limit on plot x-axis is set! Otherwise, e.g [0,200]
-    
-    if len(y_start_get)==0 or len(y_end_get)==0:
-        y_lim_plot = [ ]
-    else:
-        y_lim_plot = [float(y_start_get),float(y_end_get)] # if empty [ ] => no limit on plot y-axis is set! Otherwise, e.g [0,200]
-    
-    cir_pt1_index = int(cir_pt1_index) #to circle fit, nr. index away from first index
-    cir_pt2_index = int(cir_pt2_index) #to circle fit, nr. index away to left of end of circle!!
-    
-    num_decimals = 3 #number of decimals to round numbers
-    font_size = 14 #fontsize in labels
-    
-    
-    #_________________________________________
-    #_________________________________________
-    # IMPORT DATA
-    #_________________________________________
-    try:
-        #Load data
-        use_cols = [Real_column-1, Imag_column-1] #columns to extract from imported data
-        message = "Select your EIS file(s)"
-        Loaded_data, filename, name = Load_data(message, use_cols, header=None, skiprows=values_row_start-1)
-        
-        #Only use data in selected x_limit
-        for j in range(0,len(filename)):
-            if len(x_lim_plot) == 2: 
-                Loaded_data[j] = Loaded_data[j].sort_values(by=Loaded_data[j].columns[0])
-                Loaded_data[j] = Loaded_data[j][Loaded_data[j].iloc[:,0]>x_lim_plot[0]]
-                Loaded_data[j] = Loaded_data[j][Loaded_data[j].iloc[:,0]<x_lim_plot[1]]
-    
-        #Choose where to save plots
-        savingFolder = str(getFilepath("Choose saving folder"))
-        
-        #_________________________________________
-        #_________________________________________
-        # Curve fit
-        #_________________________________________
-        
-        num_dec = '.'+'%s'% +num_decimals+'g'
-        D_list = []
-        Lin_func_list = []
-        Lin_interval = []
-            
-        try:
-            for j in range(0,len(filename)):
-                #_________________________________________
-                #_________________________________________
-                # Linear fit
-                #_________________________________________ 
-                
-                #sort data from smallest to greatest x-value
-                sorted_data = Loaded_data[j].sort_values(by=Loaded_data[j].columns[0])
-                x_lin1 = sorted_data.iloc[:,0]
-                y_lin1 = sorted_data.iloc[:,1]
-    
-                y_lin1 = y_lin1[::-1] # flips y-coordinates, so the characteristic linear curve gets negative slope
-                slope_2 = np.gradient(y_lin1) # calculate slope
-                slope_2_index = np.where(np.round(slope_2,0) > -1) # find index where linear curce stops (end of semicircle)
-    
-                print(str("File: "),filename[j])
-                if slope_2_index[0][0] == 0: #if no positive slope was found then slope_2_index[0][0]=0
-                    circle_end_index = len(y_lin1)
-                    print("No linear curve was found.")
-                else:
-                    slope_2_value = slope_2_index[0][0] #index where slope > -1
-                    circle_end_index = len(y_lin1)-slope_2_value 
-                    x_reg = np.array(sorted_data.iloc[circle_end_index:,0]).reshape(-1,1) #x_data from end of circle to last point
-                    y_reg = np.array(sorted_data.iloc[circle_end_index:,1]).reshape(-1,1) #y_data from end of circle to last point
-                    fit1 = LinearRegression() 
-                    fit1.fit(x_reg, y_reg) #make linear fit
-                    y_pred1 = fit1.intercept_ + fit1.coef_[0]*sorted_data.iloc[:,0] #define regression on form y=b+ax
-                    R2_1_score = r2_score(y_reg.reshape(1,-1)[0],y_pred1[circle_end_index:].to_numpy()) #compute R^2 value
-                    
-                    print(str("Linear function:"),format(fit1.coef_[0][0],num_dec),str("x +"), format(fit1.intercept_[0],num_dec))
-                    print(str("Linear interval: ["),format(sorted_data.iloc[circle_end_index,0],num_dec),str(","),format(sorted_data.iloc[len(x_lin1)-1,0],num_dec),str("]"))
-                #_________________________________________
-                #_________________________________________
-                # Circle fit
-                #_________________________________________
-                def func(x, X_c, R): #define function for "non-linear least squares" fit
-                    return R**2-(x-X_c)**2 #Y^2=R^2-(x-X_c)^2, rewritten form of (x-X_c)^2+Y^2=R^2
-                #only include data from selected start point to end of semicircle minus second selected point
-                xdata = sorted_data.iloc[cir_pt1_index:circle_end_index-cir_pt2_index,0]
-                #only include data from selected start point to end of semicircle minus second selected point
-                ydata = sorted_data.iloc[cir_pt1_index:circle_end_index-cir_pt2_index,1]
-                
-                #solve non linear system
-                popt, pcov = curve_fit(func, np.array(xdata), np.array(ydata**2))
-                D=2*popt[1] #diameter of semicircle
-                print("Diameter:",D)
-                print(str("Resist Charge Transfer:"),format(D,num_dec))
-                print("\n")
-                D_list.append(float(format(D,num_dec)))
-            #_________________________________________
-            #_________________________________________
-            # DIAMETER TABLE
-            #_________________________________________
-            # Make Diameter table
-            if len(D_list)>1: #if only 1 selected file, no need to compare to any other file
-                columns_1 = ["Resist Charge Transfer / "+str(Analysis[1])]
-                rows_1 = []
-                for i in filename: #filename is list of all selected files with their filename
-                    rows_1.append(str(i))
-                value_matrix = np.array((D_list)).reshape(1,len(D_list)).T #define value matrix
-                        
-                #Table - Main table
-                print(str("Diameter overview:"))
-                Table(value_matrix,rows_1,columns_1,scale_width=2,scale_height=2, figsize=1.5)
-                plt.tight_layout()
-                #Save plot
-                plt.savefig(os.path.join(savingFolder, 'Diameter-' + filename[0] + '.pdf'), bbox_inches='tight')
-                plt.show() 
-            
-            #_________________________________________
-            #_________________________________________
-            # DIAMETER DIFFERENCE TABLE
-            #_________________________________________
-            # Make Diameter difference table
-            if len(D_list)>1: #if only 1 selected file, no need to compare to any other file
-                columns = []
-                
-                rows = []
-                for i in range(0,len(filename)): #create labels to top column and left row
-                    columns.append(str(filename[i])+str("\n Resist Charge Transfer: ")+str(D_list[i])+str(" ")+str(Analysis[1]))
-                    rows.append(str(filename[i])+str("\n Resist Charge Transfer: ")+str(D_list[i])+str(" ")+str(Analysis[1]))
-    
-                D_difference = []
-                for j in range(0,len(D_list)):
-                    for i in range(0,len(D_list)):
-                        D_difference.append(D_list[i]-D_list[j])
-                D_matrix = np.array(np.round(D_difference,5)).reshape(len(D_list),len(D_list))
-                        
-                #Table - Main table
-                print(str("Resist Charge Transfer difference matrix, \u0394Diameter:"))
-                Table(D_matrix,rows,columns,scale_width=2.5, scale_height=2,figsize=len(columns)) #this scale works best
-                #Save plot
-                plt.savefig(os.path.join(savingFolder, 'Dif_diameter' + filename[0] + '.pdf'),bbox_inches='tight')
-                plt.show()
-    
-            #_________________________________________
-            #_________________________________________
-            # DIAMETER BAR CHART
-            #_________________________________________
-            # Make Diameter bar chart 
-            if len(D_list)>1: #if only 1 selected file, no need to compare to any other file
-                fig, ax = plt.subplots()  
-                y_pos = np.arange(len(filename)) #for ticks on y-axis
-                plt.barh(y_pos, D_list, align='center', alpha=0.8, color="cornflowerblue")
-                plt.yticks(y_pos, filename) #place the ticks on y-axis
-                plt.xlabel("Resist Charge Transfer / "+str(Analysis[1]))
-                plt.title("Overview of Resist Charge Transfer for each file")
-                plt.xlim((0,1.23*max(D_list))) #make xlim great enough for text to be next to bar
-                #Position diameter value next to each bar
-                for i, v in enumerate(D_list):
-                    ax.text(v+(0.01*max(D_list)), i, str(v), color='black', fontweight='bold')
-                #Display ticks as scientific if they are rounded to 0
-                if round(max(Loaded_data[i].iloc[:,0])) == 0:
-                    ax.xaxis.set_major_formatter(mtick.FormatStrFormatter('%.1e'))
-                if round(max(Loaded_data[i].iloc[:,1])) == 0:
-                    ax.yaxis.set_major_formatter(mtick.FormatStrFormatter('%.1e'))
-                plt.savefig(os.path.join(savingFolder, 'Bar_diameter-' + filename[0] + '.pdf'),bbox_inches='tight')
-                print("Diameter overview (Bar chart):")
-                plt.show()
-        except:
-            pass
-        #_________________________________________
-        #_________________________________________
-        # EIS/ECS plot
-        #_________________________________________
-        # Make the EIS/ECS plot
-        # Based on input determine whether to label as EIS or ECS
-        symbol = ["Z","C"]
-        if str.lower(Analysis[0]) == "impedance":
-            symbol = "Z"
-            Title = "Impedance"
-        elif str.lower(Analysis[0]) == "capacitance":
-            symbol = "C"
-            Title = "Capacitance"
-        else:
-            symbol = "unit"
-            Title = "Undefined"
-        
-        print("All in one plot: ")
-        fig = plt.figure()
-        plt.rcParams["font.family"] = "georgia"
-        
-        #Constrain axes
-        plt.gca().set_aspect('equal', adjustable='box')
-        ax = fig.add_subplot(1, 1, 1)
-        
-        #Define list of different plotting markers
-        markers = ['.',',','o','v','^','>','<','1','2','3','4','s','p','*','h','H','+','x','D','d','|','_']
-        for i in range(0,len(filename)): 
-            plt.plot(Loaded_data[i].iloc[:,0], Loaded_data[i].iloc[:,1], label='%s' % filename[i], marker=markers[i])
-    
-        # Put a legend to the right of the current axis
-        box = ax.get_position()
-        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        #Make labels 
-        plt.xlabel(str(symbol)+"'  ; Re("+str(symbol)+") / "+str(Analysis[1]),fontsize=font_size)
-        plt.ylabel("-"+str(symbol)+"''  ; -Im("+str(symbol)+") / "+str(Analysis[1]),fontsize=font_size)
-        plt.title(str(Title)+" Nyquist", fontsize=font_size)
-        ax.yaxis.set_label_position("left")
-        #Set limits on x- and y-range
-        if len(x_lim_plot) == 2: 
-            plt.xlim((x_lim_plot[0], x_lim_plot[1]))
-        if len(y_lim_plot) == 2:
-            plt.ylim((y_lim_plot[0], y_lim_plot[1]))
-        
-        #Display ticks as scientific if they are rounded to 0
-        if round(max(Loaded_data[i].iloc[:,0])) == 0:
-            ax.xaxis.set_major_formatter(mtick.FormatStrFormatter('%.1e'))
-        if round(max(Loaded_data[i].iloc[:,1])) == 0:
-            ax.yaxis.set_major_formatter(mtick.FormatStrFormatter('%.1e'))
-            
-        #Save plot
-        plt.savefig(os.path.join(savingFolder, 'Plot-' + filename[0] + '.pdf'),bbox_inches='tight')
-        plt.show()
-    except:
-        sys.exit("Error in loading data. Please check you have selected an EIS/ECS excel/csv file and written the correct columns to be included.")
+        slope_2_value = slope_2_index[0][0]
+        circle_end_index = len(y_lin1_flipped) - slope_2_value
+        # linear regression from the 'end' of circle to last point:
+        x_reg = np.array(sorted_data.iloc[circle_end_index:, real_idx]).reshape(-1,1)
+        y_reg = np.array(sorted_data.iloc[circle_end_index:, imag_idx]).reshape(-1,1)
+        fit1  = LinearRegression().fit(x_reg, y_reg)
+        y_pred1 = fit1.intercept_ + fit1.coef_[0]*sorted_data.iloc[:,real_idx]
+        R2_1_score = r2_score(y_reg.ravel(), y_pred1[circle_end_index:].to_numpy())
+
+        num_dec = '.' + f'{num_decimals}g'
+        print("Linear function:",
+              f"{fit1.coef_[0][0]:{num_dec}} x + {fit1.intercept_[0]:{num_dec}}")
+        if circle_end_index < len(x_lin1):
+            print("Linear interval: [",
+                  f"{sorted_data.iloc[circle_end_index,real_idx]:{num_dec}},",
+                  f"{sorted_data.iloc[len(x_lin1)-1,real_idx]:{num_dec}} ]")
+
+    # 9) Circle fit
+    def func_circle(x, X_c, R):
+        # Y^2 = R^2 - (x - X_c)^2
+        return R**2 - (x - X_c)**2
+
+    # pick data from cir_pt1_index to circle_end_index-cir_pt2_index
+    xdata = sorted_data.iloc[cir_pt1_index: circle_end_index - cir_pt2_index, real_idx]
+    ydata = sorted_data.iloc[cir_pt1_index: circle_end_index - cir_pt2_index, imag_idx]
+
+    from scipy.optimize import curve_fit
+    popt, pcov = curve_fit(func_circle, xdata.values, (ydata.values**2))
+    # diameter:
+    D = 2 * popt[1]
+    print("Diameter:", D)
+
+    # 10) For single-file, we can do a bar chart or table, but it’s just 1 file
+    # We'll skip the multi-file difference table logic.
+    # We'll show a single "Resist Charge Transfer" line:
+    print(f"Resist Charge Transfer: {D:.3f} {unit}")
+
+    # 11) Plot the all-in-one
+    symbol = "Z"
+    Title  = "Impedance Nyquist"
+    # If you had 'capacitance', you'd do something else
+
+    fig = plt.figure()
+    plt.rcParams["font.family"] = "georgia"
+    ax = fig.add_subplot(1,1,1)
+    ax.set_aspect('equal', adjustable='box')
+
+    # single-file
+    ax.plot(sorted_data.iloc[:,real_idx],
+            sorted_data.iloc[:,imag_idx],
+            'o-', label='Data')
+
+    ax.legend(loc='best')
+    ax.set_xlabel(f"{symbol}'  ; Re({symbol}) / {unit}", fontsize=font_size)
+    ax.set_ylabel(f"-{symbol}''  ; -Im({symbol}) / {unit}", fontsize=font_size)
+    ax.set_title(Title, fontsize=font_size)
+
+    if len(x_lim_plot) == 2:
+        plt.xlim(x_lim_plot[0], x_lim_plot[1])
+    if len(y_lim_plot) == 2:
+        plt.ylim(y_lim_plot[0], y_lim_plot[1])
+
+    # If near zero, use scientific notation
+    if round(sorted_data.iloc[:,real_idx].max()) == 0:
+        ax.xaxis.set_major_formatter(mtick.FormatStrFormatter('%.1e'))
+    if round(sorted_data.iloc[:,imag_idx].max()) == 0:
+        ax.yaxis.set_major_formatter(mtick.FormatStrFormatter('%.1e'))
+
+    plot_name = os.path.join(saving_folder, "EIS_single_file_plot.pdf")
+    plt.savefig(plot_name, bbox_inches='tight')
+    plt.show()
+
+    print(f"Plot saved: {plot_name}")
+
+    # Return dictionary with relevant data
+    return {
+      "diameter": D,
+      "plot_path": plot_name
+    }
