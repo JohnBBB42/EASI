@@ -121,6 +121,44 @@ def run_eis_analysis(df):
         except Exception as e:
             st.error(f"Error during EIS Analysis: {e}")
 
+##############################################
+# DPV Analysis
+##############################################
+def run_dpv_analysis():
+    st.write("## DPV Analysis")
+    uploaded_file = st.file_uploader("Upload a DPV data file", type=["csv","xlsx","xls"])
+    blank_file = st.file_uploader("Upload a Blank Responses File (Optional)", type=["csv","xlsx","xls"])
+    
+    if uploaded_file is not None:
+        # Save the uploaded DPV file to a temporary file (Analysis_DPV expects a file path)
+        tfile = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[-1])
+        tfile.write(uploaded_file.getvalue())
+        tfile.close()
+        file_path = tfile.name
+        
+        if blank_file is not None:
+            tbfile = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(blank_file.name)[-1])
+            tbfile.write(blank_file.getvalue())
+            tbfile.close()
+            blank_path = tbfile.name
+        else:
+            blank_path = None
+        
+        if st.button("Run DPV Analysis"):
+            try:
+                # Call Analysis_DPV with or without the blank responses file
+                if blank_path:
+                    result = Analysis_DPV(file_path, blank_responses=blank_path)
+                else:
+                    result = Analysis_DPV(file_path)
+                st.success("DPV analysis completed successfully!")
+                st.write("Analysis Results:")
+                st.write(result)
+            except Exception as e:
+                st.error(f"Error during DPV Analysis: {e}")
+    else:
+        st.warning("Please upload a valid DPV data file.")
+
 
 
 ##############################################
