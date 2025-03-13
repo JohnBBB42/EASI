@@ -23,7 +23,8 @@ from scipy.ndimage import gaussian_filter1d
 from PIL import Image
 import matplotlib.pyplot as plt
 
-from electrochemical_methods.Analysis_DPV import Analysis_DPV
+# from electrochemical_methods.Analysis_DPV import Analysis_DPV
+from electrochemical_methods.Analysis_DPV import analysis_dpv_streamlit
 from electrochemical_methods.Analysis_CV import Analysis_CV
 from electrochemical_methods.Analysis_EIS import Analysis_EIS
 
