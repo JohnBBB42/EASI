@@ -24,7 +24,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 # Import your analysis functions:
-from electrochemical_methods.Analysis_DPV_streamlit import analysis_dpv_streamlit
+from electrochemical_methods.Analysis_DPV_streamlit import Analysis_DPV
 from electrochemical_methods.Analysis_CV import Analysis_CV
 from electrochemical_methods.Analysis_EIS import Analysis_EIS
 
@@ -120,138 +120,7 @@ def run_eis_analysis(df):
         except Exception as e:
             st.error(f"Error during EIS Analysis: {e}")
 
-##############################################
-# DPV Analysis
-##############################################
-def run_dpv_analysis():
-    # A helper function to parse a complex DPV file upload:
-    def parse_complex_dpv_file(dpv_file):
-        content = dpv_file.getvalue()  # raw bytes
-        text = content.decode('utf-16', errors='replace')
-        lines = text.split('\n')
-        # Remove any leading BOM characters
-        for i in range(len(lines)):
-            lines[i] = lines[i].lstrip('\ufeff')
-        # Find the header line that starts with "V,µA"
-        header_line_index = None
-        for i, line in enumerate(lines):
-            if line.strip().startswith("V,µA"):
-                header_line_index = i
-                break
-        if header_line_index is None:
-            return lines, None
-        metadata_lines = lines[:header_line_index]
-        csv_text = '\n'.join(lines[header_line_index:])
-        from io import StringIO
-        df = pd.read_csv(StringIO(csv_text), sep=',', engine='python')
-        return metadata_lines, df
 
-    st.title("DPV Analysis - Refactored from Analysis_DPV")
-    st.markdown("""
-    This app refactors your original 'Analysis_DPV' to use data from Streamlit uploads.
-    Please upload your DPV file and (optionally) a blank file for LOD analysis.
-    """)
-
-    # Upload main DPV file
-    dpv_file = st.file_uploader("Upload your DPV file (CSV or Excel)", type=["csv","xlsx","xls"])
-    dpv_df = None
-    metadata_lines = []
-    if dpv_file:
-        try:
-            metadata_lines, dpv_df = parse_complex_dpv_file(dpv_file)
-            if dpv_df is None:
-                st.error("Could not find a line starting with 'V,µA'. Please check your CSV format.")
-                st.write("Below are the metadata/leftover lines:")
-                for mline in metadata_lines:
-                    st.text(mline)
-                dpv_df = None
-            else:
-                st.subheader("Metadata lines above the real header:")
-                for line in metadata_lines:
-                    st.text(line)
-                st.write("Preview of DPV data after parsing:")
-                st.dataframe(dpv_df.head(15))
-        except Exception as e:
-            st.error(f"Error parsing DPV file: {e}")
-            dpv_df = None
-
-    # Upload optional blank file for LOD analysis
-    blank_file = st.file_uploader("Optionally upload a blank file for LOD analysis:", type=["csv","xlsx","xls"])
-    blank_df = None
-    if blank_file:
-        try:
-            blank_df = pd.read_csv(blank_file, engine='python', sep=None, encoding='utf-16')
-            st.write("Preview of Blank data:")
-            st.dataframe(blank_df.head(15))
-        except Exception as e:
-            st.error(f"Error parsing blank file: {e}")
-            blank_df = None
-
-    # Run analysis when user clicks the button
-    if st.button("Run DPV Analysis"):
-        if dpv_df is None or dpv_df.empty:
-            st.error("Please upload a valid DPV file before running analysis.")
-            return
-        with st.spinner("Running DPV analysis..."):
-            analysis_results = analysis_dpv_streamlit(dpv_df=dpv_df, blank_df=blank_df)
-        if not analysis_results:
-            st.warning("No results returned from analysis.")
-            return
-        st.success("DPV analysis complete!")
-        # Display basic analysis results:
-        st.write("**Mean Peak Currents:**")
-        st.json(analysis_results['mean_peak_currents'])
-        st.write("**STD of Peak Currents:**")
-        st.json(analysis_results['std_peak_currents'])
-        st.write("**COV of Peak Currents:**")
-        st.json(analysis_results['cov_peak_currents'])
-        if analysis_results['lod_results'] is not None:
-            st.write("**LOD Results:**")
-            st.json(analysis_results['lod_results'])
-        st.write("**T-Test Results:**")
-        st.json(analysis_results['t_test_results'])
-        st.write("**Parsed Metadata:**")
-        st.json(analysis_results['parsed_metadata'])
-        st.write("**Headers:**")
-        st.json(analysis_results['headers'])
-        st.write("**Collected Peak Results:**")
-        st.dataframe(pd.DataFrame(analysis_results['results']))
-
-        # Now let the user choose one of six independent DPV analysis options.
-        dpv_options = [
-            "DPV Analysis", 
-            "Plot Data Array with Corrected Baseline", 
-            "Analyze Peak Currents", 
-            "Observed vs Expected Concentration", 
-            "LOD Analysis", 
-            "T-test Analysis"
-        ]
-        dpv_choice = st.selectbox("Select DPV Analysis Option", dpv_options)
-        
-        # Based on the user’s selection, display the appropriate additional output.
-        if dpv_choice == "DPV Analysis":
-            st.info("Basic DPV analysis results are shown above.")
-        elif dpv_choice == "Plot Data Array with Corrected Baseline":
-            data_array = analysis_results['data_array']
-            headers = analysis_results['headers']
-            parsed_md = analysis_results['parsed_metadata']
-            if data_array is None:
-                st.error("No data_array found in results.")
-            else:
-                # Let the user select which plot pairs to display (by pair index)
-                n_pairs = len(headers) // 2
-                selected = st.multiselect("Select plot pairs (enter indices starting from 0):", list(range(n_pairs)), default=list(range(n_pairs)))
-                selected_indices = [i * 2 for i in selected]
-                fig = plot_data_array_with_corrected_baseline(data_array, headers, parsed_md, selected_indices)
-                st.pyplot(fig)
-        elif dpv_choice == "Analyze Peak Currents":
-            st.write("Peak Currents analysis details are included in the results above.")
-        elif dpv_choice == "Observed vs Expected Concentration":
-            st.write("Observed vs Expected Concentration plotting not implemented yet.")
-        elif dpv_choice == "LOD Analysis":
-            st.write("LOD Analysis details are included in the results above.")
-        elif dpv_choice == "T-test Analysis":
-            st.write("T-test Analysis details are included in the results above.")
 
 ##############################################
 # Main Application Interface
