@@ -27,8 +27,6 @@ import matplotlib.pyplot as plt
 from electrochemical_methods.Analysis_DPV_streamlit import analysis_dpv_streamlit
 from electrochemical_methods.Analysis_CV import Analysis_CV
 from electrochemical_methods.Analysis_EIS import Analysis_EIS
-# Import your plotting function (if separate):
-from electrochemical_methods.Plotting import plot_data_array_with_corrected_baseline
 
 ##############################################
 # CV Analysis
