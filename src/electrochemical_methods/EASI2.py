@@ -14,8 +14,15 @@ os.chdir(dname)
 sys.path.append(dname)
 
 # Import packages
+import csv
+import tempfile
 import numpy as np
 import tkinter as tk
+from scipy.signal import find_peaks
+from collections import defaultdict
+from scipy import sparse
+from scipy.sparse.linalg import spsolve
+from scipy.stats import linregress
 from tkinter import ttk
 import pandas as pd
 from tkinter import Button, END, Entry, Label, LabelFrame, OptionMenu, StringVar, messagebox, Toplevel, filedialog
@@ -27,7 +34,6 @@ from electrochemical_methods.Analysis_CV import Analysis_CV
 from electrochemical_methods.Analysis_DPV import Analysis_DPV
 from electrochemical_methods.Analysis_EIS import Analysis_EIS
 from electrochemical_methods.Plotting import Plots_all_imported
-
 
 class CVApp:
     def __init__(self, master):
@@ -384,20 +390,6 @@ class Custom_Plot_App:
         
     def close_window(self): 
         self.master.destroy()
-
-import os
-import csv
-import tempfile
-import numpy as np
-from scipy.signal import find_peaks
-import matplotlib.pyplot as plt
-from collections import defaultdict
-from tkinter import filedialog, messagebox, Toplevel, StringVar, Label, LabelFrame, Button, OptionMenu
-from scipy import sparse
-from scipy.sparse.linalg import spsolve
-from scipy.stats import linregress
-
-
 
 class DPVApp:
     def __init__(self, master, main_window):
