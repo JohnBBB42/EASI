@@ -148,7 +148,7 @@ def run_dpv_analysis():
         """
         import io
         content = dpv_file.getvalue()  # raw bytes
-        text = content.decode('utf-16', errors='replace')  # your file is often utf-16
+        text = content.decode('utf-16-sig', errors='replace')  # *Key difference here*
         lines = text.split('\n')
         
         # find line that starts with V,µA
