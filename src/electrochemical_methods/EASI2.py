@@ -182,59 +182,38 @@ class EISApp:
             self.df = None
 
     def run_analysis(self):
-        """
-        Steps:
-          1) Ensure df is loaded
-          2) Auto-detect or let user pick columns
-          3) Ask for folder to save results
-          4) Call Analysis_EIS with those parameters
-        """
         if self.df is None or self.df.empty:
             messagebox.showwarning("No Data", "Please import a valid file first.")
             return
-
-        selected_option = self.clicked.get()
-        if selected_option == "EIS Analysis":
-            try:
-                # Example simple auto-detect approach:
-                num_cols = self.df.shape[1]
-                if num_cols < 2:
-                    messagebox.showerror("Column Error", "Data must have at least 2 columns.")
-                    return
-
-                # We'll assume:
-                #   Column0 -> Real(Z) (1-based => 1)
-                #   Column1 -> Imag(Z) (1-based => 2)
-                # If there's a 3rd column, we might store frequency or something, but we skip for now.
-                z_r_col  = 1
-                z_im_col = 2
-
-                # Pick folder to save results
-                saving_folder = filedialog.askdirectory(title="Select folder to save EIS results")
-                if not saving_folder:
-                    messagebox.showwarning("No Folder", "No folder selected, analysis canceled.")
-                    return
-
-                # Now call your EIS analysis
-                # We'll pass some default intervals or parameters
-                Analysis_EIS(
-                    df=self.df,
-                    values_row_start=1,
-                    z_r_column=z_r_col,
-                    z_im_column=z_im_col,
-                    z_r_start=None,  # or some numeric
-                    z_r_end=None,
-                    z_im_start=None,
-                    z_im_end=None,
-                    impedance_unit="Ω",
-                    circle_point1_index=0,
-                    circle_point2_index=0,
-                    saving_folder=saving_folder
-                )
-                messagebox.showinfo("Success", "EIS analysis completed successfully!")
-
-            except Exception as e:
-                messagebox.showerror("Analysis Error", f"An error occurred: {e}")
+    
+        # Possibly auto-detect columns or let user pick
+        # Example: col1=Z_R, col2=Z_Im
+        z_r_col = 1
+        z_im_col= 2
+    
+        saving_folder = filedialog.askdirectory(title="Select folder to save EIS results")
+        if not saving_folder:
+            messagebox.showwarning("No folder", "Analysis canceled.")
+            return
+    
+        try:
+            result = Analysis_EIS(
+                df=self.df,
+                values_row_start=2,  # if you skip row 1
+                real_col=z_r_col,
+                imag_col=z_im_col,
+                x_start=None,
+                x_end=None,
+                y_start=None,
+                y_end=None,
+                unit="Ω",
+                circle_pt1_index=0,
+                circle_pt2_index=0,
+                saving_folder=saving_folder
+            )
+            messagebox.showinfo("Success", f"EIS analysis done. Plot at {result['plot_path']}")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
 
 class Custom_Plot_App:
