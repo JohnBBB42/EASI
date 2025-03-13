@@ -139,7 +139,7 @@ def run_eis_analysis(df):
 # 4) The main Streamlit UI 
 #    So we can replicate the old DPV usage
 ##############################################
-def main():
+def run_dpv_analysis():
     st.title("DPV Analysis - Refactored from Analysis_DPV")
 
     st.markdown("""
@@ -297,3 +297,111 @@ def main():
                 st.pyplot(f)
 
         st.info("Done with sub-steps.")
+
+def main():
+    st.title("Electrochemical Analysis Software Interface (EASI)")
+    st.markdown("""
+    Welcome to the Electrochemical Analysis Software Interface (EASI).
+    
+    This tool provides various electrochemical analysis methods:
+    1. Cyclic Voltammetry (CV) Analysis
+    2. Differential Pulse Voltammetry (DPV) Analysis
+    3. Electrochemical Impedance Spectroscopy (EIS) Analysis
+    
+    Please select an option from the dropdown below to proceed.
+    """)
+
+    analysis_choice = st.selectbox(
+        "Select Analysis",
+        ["(None)", "CV Analysis", "DPV Analysis", "EIS Analysis"]
+    )
+
+    if analysis_choice == "(None)":
+        st.info("Please choose an analysis to begin.")
+        return
+
+    ############################################
+    # CV Analysis
+    ############################################
+    if analysis_choice == "CV Analysis":
+        st.header("Cyclic Voltammetry (CV) Analysis")
+
+        # Let user upload a CSV/Excel
+        uploaded_file = st.file_uploader(
+            "Upload a CV data file", 
+            type=["csv","xlsx","xls"]
+        )
+        df = None
+        if uploaded_file:
+            # Ask if there's a header
+            has_header = st.checkbox("Does the first row contain headers?", value=False)
+            try:
+                if uploaded_file.name.lower().endswith(".csv"):
+                    df = pd.read_csv(uploaded_file, header=(0 if has_header else None))
+                else:
+                    df = pd.read_excel(uploaded_file, header=(0 if has_header else None))
+                st.write("Preview of CV data:")
+                st.dataframe(df.head(10))
+            except Exception as e:
+                st.error(f"Could not read CV file: {e}")
+                df = None
+
+        if df is not None and not df.empty:
+            # Now call your run_cv_analysis(df)
+            st.subheader("Configure & Run CV Analysis")
+            run_cv_analysis(df)
+        else:
+            st.warning("Please upload a valid CV file.")
+
+    ############################################
+    # DPV Analysis
+    ############################################
+    elif analysis_choice == "DPV Analysis":
+        st.header("Differential Pulse Voltammetry (DPV) Analysis")
+
+        # Your DPV logic is already a self-contained function 
+        # that does the file uploads inside it. 
+        # So we just call it directly. 
+        # (It will show its own UI for uploading main + blank file.)
+        run_dpv_analysis()
+
+    ############################################
+    # EIS Analysis
+    ############################################
+    elif analysis_choice == "EIS Analysis":
+        st.header("Electrochemical Impedance Spectroscopy (EIS) Analysis")
+
+        # Let user upload a CSV/Excel
+        uploaded_file = st.file_uploader(
+            "Upload an EIS data file", 
+            type=["csv","xlsx","xls"]
+        )
+        df = None
+        if uploaded_file:
+            # Ask if there's a header
+            has_header = st.checkbox("Does the first row contain headers?", value=False)
+            try:
+                if uploaded_file.name.lower().endswith(".csv"):
+                    df = pd.read_csv(uploaded_file, header=(0 if has_header else None))
+                else:
+                    df = pd.read_excel(uploaded_file, header=(0 if has_header else None))
+                st.write("Preview of EIS data:")
+                st.dataframe(df.head(10))
+            except Exception as e:
+                st.error(f"Could not read EIS file: {e}")
+                df = None
+
+        if df is not None and not df.empty:
+            # Now call your run_eis_analysis(df)
+            st.subheader("Configure & Run EIS Analysis")
+            run_eis_analysis(df)
+        else:
+            st.warning("Please upload a valid EIS file.")
+
+
+#############################################
+# The usual Streamlit entry point
+#############################################
+if __name__ == "__main__":
+    main()
+
