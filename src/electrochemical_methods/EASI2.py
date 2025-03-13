@@ -135,167 +135,85 @@ class CVApp:
         except Exception as e:
             messagebox.showerror("Analysis Error", f"An error occurred: {e}")
 
-
 class EISApp:
-    def __init__(self,master):
+    def __init__(self, master):
         self.master = master
-        master.title('EIS analysis')
-        master.geometry("500x400")
-        
-        # Drop down boxes
-        self.options = ["EIS-analysis"]
-        self.clicked = StringVar()
-        self.clicked.set(self.options[0])
-        
-        # Make frame
-        self.frame = LabelFrame(master,text="Select analysis", height=5, width=5)
-        self.frame.grid(row=0,column=1)
-        #_____________________________
-        # Dropdown menu
-        #_____________________________
-        dropAnalys = OptionMenu(self.frame, self.clicked, *self.options)
-        dropAnalys.grid(row=0, column=1)
-        
-        self.clicked.trace("w",self.change) #track if something happens to variable
-        
-        #_____________________________
-        # Initial Entry boxes
-        #_____________________________
-        self.variable1 = self.entry_box('values_row_start',2,1,2)
-        self.variable2 = self.entry_box('Z_R_column',3,1,3)
-        self.variable3 = self.entry_box('Z_Im_column',4,1,4)
-        self.variable4 = self.entry_box('Z_R_start',5,1,"")
-        self.variable5 = self.entry_box('Z_R_end',6,1,"")
-        self.variable6 = self.entry_box('Z_Im_start',7,1,"")
-        self.variable7 = self.entry_box('Z_Im_end',8,1,"")
-        self.variable8 = self.entry_box('impedance_unit',9,1,"Ω")
-        self.variable9 = self.entry_box('circle_point1_index',10,1,0)
-        self.variable10 = self.entry_box('circle_point2_index',11,1,0)
-        
-        #_____________________________
-        # Info boxes
-        #_____________________________
-        self.button1 = Button(master, text = "info",command=self.info_box1).grid(row=2, column=2)
-        self.button2 = Button(master, text = "info", command=self.info_box2).grid(row=3, column=2)
-        self.button3 = Button(master, text = "info", command=self.info_box3).grid(row=4, column=2)
-        self.button4 = Button(master, text = "info", command=self.info_box4).grid(row=5, column=2)
-        self.button5 = Button(master, text = "info", command=self.info_box5).grid(row=6, column=2)
-        self.button6 = Button(master, text = "info", command=self.info_box6).grid(row=7, column=2)
-        self.button7 = Button(master, text = "info", command=self.info_box7).grid(row=8, column=2)
-        self.button8 = Button(master, text = "info", command=self.info_box8).grid(row=9, column=2)
-        self.button9 = Button(master, text = "info", command=self.info_box9).grid(row=10, column=2)
-        self.button10 = Button(master, text = "info", command=self.info_box10).grid(row=11, column=2)
+        master.title("EIS Analysis")
+        master.geometry("500x300")
 
-                
-        #_____________________________
-        # Run button
-        #_____________________________
-        self.run_button = Button(master,text="Run!",command = self.onclick)
-        self.run_button.grid(row=12,column=1)
-        
-    #_____________________________
-    # Info boxes - Text definitions
-    #_____________________________ 
-    def info_box1(self):
-        Text = "The row for which the First value appears in the excel/csv file."
-        tk.messagebox.showinfo("Info",str(Text))
-    
-    def info_box2(self):
-        if self.clicked.get() == self.options[0]:
-            Text = "Check your excel/csv file and list the column number of where the Real part of impedance values appear."
-        tk.messagebox.showinfo("Info",str(Text))
-    
-    def info_box3(self):
-        if self.clicked.get() == self.options[0]:
-            Text = "Check your excel/csv file and list the column number of where the Imaginary part of impedance values appear."
-        tk.messagebox.showinfo("Info",str(Text))
-    
-    def info_box4(self):
-        if self.clicked.get() == self.options[0]:
-            Text = "Insert value for Start interval of Real part of impedance values. NB: both Z_R_start and Z_R_end must be inserted for the interval range to be created."
-        tk.messagebox.showinfo("Info",str(Text))
-    
-    def info_box5(self):
-        if self.clicked.get() == self.options[0]:
-            Text = "Insert value for End interval of Real part of impedance values. NB: both Z_R_start and Z_R_end must be inserted for the interval range to be created."
-        tk.messagebox.showinfo("Info",str(Text))
-    
-    def info_box6(self):
-        if self.clicked.get() == self.options[0]:
-            Text = "Insert value for Start interval of Imaginary part of impedance values. NB: both Z_Im_start and Z_Im_end must be inserted for the interval range to be created."
-        tk.messagebox.showinfo("Info",str(Text))
-    
-    def info_box7(self):
-        if self.clicked.get() == self.options[0]:
-            Text = "Insert value for End interval of Imaginary part of impedance values. NB: both Z_Im_start and Z_Im_end must be inserted for the interval range to be created."
-        tk.messagebox.showinfo("Info",str(Text))        
+        self.df = None         # We'll store the loaded DataFrame here
+        self.filepath = None
 
-    def info_box8(self):
-        if self.clicked.get() == self.options[0]:
-            Text = "Type the Impedance unit."
-        tk.messagebox.showinfo("Info",str(Text))  
+        # Single drop-down option for now
+        self.options = ["EIS Analysis"]
+        self.clicked = StringVar(value=self.options[0])
+
+        frame = LabelFrame(master, text="Select Analysis")
+        frame.pack(padx=10, pady=10, fill="x")
+        OptionMenu(frame, self.clicked, *self.options).pack(fill="x")
+
+        # Import file button
+        Button(master, text="Import File", command=self.import_file).pack(pady=5)
+        self.file_label = Label(master, text="No file selected")
+        self.file_label.pack(pady=5)
+
+        # Run analysis button
+        Button(master, text="Run Analysis", command=self.run_analysis).pack(pady=5)
+
+    def import_file(self):
+        """
+        User picks a single CSV or Excel. We load it into self.df exactly once.
+        No repeated textboxes for columns. If there's a header row, remove 'header=None' or adjust.
+        """
+        self.filepath = filedialog.askopenfilename(
+            filetypes=[("CSV files", "*.csv"), ("Excel files", "*.xlsx;*.xls")]
+        )
+        if not self.filepath:
+            return
+
+        self.file_label.config(text=self.filepath)
+        try:
+            if self.filepath.lower().endswith(".csv"):
+                self.df = pd.read_csv(self.filepath, header=None)
+            else:
+                self.df = pd.read_excel(self.filepath, header=None)
+        except Exception as e:
+            messagebox.showerror("File Error", f"Could not read file: {e}")
+            self.df = None
+
+    def run_analysis(self):
+        if self.df is None or self.df.empty:
+            messagebox.showwarning("No Data", "Please import a valid file first.")
+            return
     
-    def info_box9(self):
-        if self.clicked.get() == self.options[0]:
-            Text = "Type the starting index number to be used in the semicircle fit."
-        tk.messagebox.showinfo("Info",str(Text))  
+        # Possibly auto-detect columns or let user pick
+        # Example: col1=Z_R, col2=Z_Im
+        z_r_col = 1
+        z_im_col= 2
     
-    def info_box10(self):
-        if self.clicked.get() == self.options[0]:
-            Text = "Type the number of indexes to the left of the semicircle end that defines the final interval of the semicircle fit."
-        tk.messagebox.showinfo("Info",str(Text))  
-    #_____________________________
-    # Entry boxes
-    #_____________________________
-    def entry_box(self,Text, row, column, default_input, width = 20):
-        Text = str(Text)
-        Label(self.master, text=str(Text),width = width).grid(row=row)
-        E = Entry(self.master)
-        E.insert(END,str(default_input))
-        E.grid(row=row, column=column) 
-        return E
-
-    def change(self, *args):
-        if self.clicked.get() == self.options[0]:
-            self.variable1 = self.entry_box('values_row_start',2,1,2)
-            self.variable2 = self.entry_box('Z_R_column',3,1,3)
-            self.variable3 = self.entry_box('Z_Im_column',4,1,4)
-            self.variable4 = self.entry_box('Z_R_start',5,1,"")
-            self.variable5 = self.entry_box('Z_R_end',6,1,"")
-            self.variable6 = self.entry_box('Z_Im_start',7,1,"")
-            self.variable7 = self.entry_box('Z_Im_end',8,1,"")
-            self.variable8 = self.entry_box('impedance_unit',9,1,"Ω")
-            self.variable9 = self.entry_box('circle_point1_index',10,1,0)
-            self.variable10 = self.entry_box('circle_point2_index',11,1,0)
-
-        else:
-            pass
-
-    #_____________________________
-    # Save input in entry boxes and function for run-command
-    #_____________________________
+        saving_folder = filedialog.askdirectory(title="Select folder to save EIS results")
+        if not saving_folder:
+            messagebox.showwarning("No folder", "Analysis canceled.")
+            return
     
-    def onclick(self,*args): 
-        self.variable1_get = self.variable1.get()
-        self.variable2_get = self.variable2.get()
-        self.variable3_get = self.variable3.get()
-        self.variable4_get = self.variable4.get()
-        self.variable5_get = self.variable5.get()
-        self.variable6_get = self.variable6.get()
-        self.variable7_get = self.variable7.get()
-        self.variable8_get = self.variable8.get()
-        self.variable9_get = self.variable9.get()
-        self.variable10_get = self.variable10.get()
-        values = [int(self.variable1_get),int(self.variable2_get),int(self.variable3_get),str(self.variable4_get),str(self.variable5_get),
-                  str(self.variable6_get),str(self.variable7_get),str(self.variable8_get),str(self.variable9_get),str(self.variable10_get)]
-        
-        #option to close tkinter window
-        #self.close_window
-
-        if self.clicked.get() == self.options[0]:
-            Analysis_EIS(values[0], values[1],values[2],values[3],values[4],values[5],values[6],values[7],values[8],values[9])          
-        else:
-            pass
+        try:
+            result = Analysis_EIS(
+                df=self.df,
+                values_row_start=2,  # if you skip row 1
+                real_col=z_r_col,
+                imag_col=z_im_col,
+                x_start=None,
+                x_end=None,
+                y_start=None,
+                y_end=None,
+                unit="Ω",
+                circle_pt1_index=0,
+                circle_pt2_index=0,
+                saving_folder=saving_folder
+            )
+            messagebox.showinfo("Success", f"EIS analysis done. Plot at {result['plot_path']}")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
 
 class Custom_Plot_App:
