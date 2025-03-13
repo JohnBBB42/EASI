@@ -71,41 +71,40 @@ def run_cv_analysis(df):
 # EIS Analysis
 ##############################################
 def run_eis_analysis(df):
-    """
-    Takes a DataFrame `df` that has already been uploaded/read
-    in the main function, then runs EIS analysis with the same
-    defaults as your Tkinter version. 
-    """
     st.write("## EIS Analysis")
-
-    # Convert the Real (Z') and Imag (Z'') columns to numeric
-    # if your data is in columns 3 and 4 (1-based).
+    
+    # We assume that the Real (Z') and Imag (-Z'') data are in the 3rd and 4th columns (1-based indexing)
     real_idx = 3 - 1  # zero-based index for column 3
     imag_idx = 4 - 1  # zero-based index for column 4
-
+    
     try:
-        # Replace commas with dots, then convert to float.
-        df.iloc[:, real_idx] = pd.to_numeric(
-            df.iloc[:, real_idx].astype(str).str.replace(',', '.'),
-            errors='raise'
-        )
-        df.iloc[:, imag_idx] = pd.to_numeric(
-            df.iloc[:, imag_idx].astype(str).str.replace(',', '.'),
-            errors='raise'
-        )
+        # Check if the first entry in the real column is non-numeric (likely a header)
+        first_val_real = df.iloc[0, real_idx]
+        # Replace commas with dots and remove at most one dot for a proper float test.
+        first_val_str = str(first_val_real).replace(',', '.')
+        # isdigit() is not enough (for floats), so we try to convert it
+        try:
+            float(first_val_str)
+        except ValueError:
+            st.info("Detected header text in data. Dropping the first row.")
+            df = df.iloc[1:].reset_index(drop=True)
+        
+        # Now convert the designated columns to numeric
+        df.iloc[:, real_idx] = pd.to_numeric(df.iloc[:, real_idx].astype(str).str.replace(',', '.'), errors='raise')
+        df.iloc[:, imag_idx] = pd.to_numeric(df.iloc[:, imag_idx].astype(str).str.replace(',', '.'), errors='raise')
     except Exception as conv_err:
         st.error(f"Error converting columns to numeric: {conv_err}")
         return
 
-    # Let the user specify a folder path (optional)
+    # Let the user specify a folder path for saving results (optional)
     saving_folder = st.text_input("Saving Folder Path", value=".")
 
-    # Button to run the actual EIS Analysis
+    # When the user clicks the button, run the EIS Analysis using your defaults
     if st.button("Run EIS Analysis"):
         try:
             result = Analysis_EIS(
                 df=df,
-                values_row_start=1,   # same as Tkinter default
+                values_row_start=1,   # same as your Tkinter default
                 real_col=3,           # 3rd column (1-based)
                 imag_col=4,           # 4th column (1-based)
                 x_start=None,
