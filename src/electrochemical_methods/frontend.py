@@ -24,7 +24,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 # Import your analysis functions:
-from electrochemical_methods.Analysis_DPV_streamlit import Analysis_DPV
+from electrochemical_methods.Analysis_DPV import Analysis_DPV
 from electrochemical_methods.Analysis_CV import Analysis_CV
 from electrochemical_methods.Analysis_EIS import Analysis_EIS
 
@@ -36,8 +36,9 @@ def run_cv_analysis(df):
     st.write("### Step 1: Configure Analysis")
     values_row_start = st.number_input("values_row_start (skip lines)", value=2)
     potential_column = st.number_input("potential_column (1-based)", value=1)
-    current_column   = st.number_input("current_column (1-based)", value=2)
-    scan_column      = st.number_input("scan_column (1-based, 0=none)", value=0)
+    # Updated defaults to match tkinter app
+    current_column   = st.number_input("current_column (1-based)", value=3)
+    scan_column      = st.number_input("scan_column (1-based, 0=none)", value=5)
     scan_number      = st.number_input("scan_number", value=1)
     linreg_start_idx = st.number_input("linreg_start_index", value=15)
     r2_value         = st.number_input("r2_accept_value", value=0.90)
