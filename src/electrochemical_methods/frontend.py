@@ -73,35 +73,23 @@ def run_cv_analysis(df):
 ##############################################
 def run_eis_analysis(df):
     st.write("## EIS Analysis")
-    # 1) Let the user upload a CSV or Excel file
-    uploaded_file = st.file_uploader("Upload EIS data (CSV or Excel)", type=["csv","xlsx","xls"])
-    if not uploaded_file:
-        st.info("Please upload a file to continue.")
+
+    # If df is None or empty, warn and return
+    if df is None or df.empty:
+        st.warning("No EIS data loaded. Please go back and upload a valid file.")
         return
 
-    # 2) Read the file with header=0 (like your tkinter version)
-    #    If your decimals are commas, add `decimal=','`.
-    try:
-        if uploaded_file.name.lower().endswith(".csv"):
-            df = pd.read_csv(uploaded_file, header=0)
-        else:
-            df = pd.read_excel(uploaded_file, header=0)
-    except Exception as e:
-        st.error(f"Could not read file: {e}")
-        return
-
-    # 3) Let the user choose a folder path to save results (optional)
+    # Let user specify a saving folder
     saving_folder = st.text_input("Saving Folder Path", value=".")
 
-    # 4) Button to run EIS Analysis with the same defaults as in your tkinter example
     if st.button("Run EIS Analysis"):
         try:
-            # EXACT same arguments you used in tkinter:
+            # EXACT same defaults as your Tkinter example:
             result = Analysis_EIS(
                 df=df,
-                values_row_start=1,   # skip no extra lines beyond the header=0
-                real_col=3,           # Z' in the 3rd column (1-based)
-                imag_col=4,           # -Z'' in the 4th column (1-based)
+                values_row_start=1,   
+                real_col=3,          
+                imag_col=4,          
                 x_start=None,
                 x_end=None,
                 y_start=None,
@@ -118,7 +106,6 @@ def run_eis_analysis(df):
                 st.write("Check your output folder for saved PDF plots.")
         except Exception as e:
             st.error(f"Error during EIS Analysis: {e}")
-
 
 ##############################################
 # DPV Analysis
