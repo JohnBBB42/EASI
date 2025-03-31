@@ -2,7 +2,6 @@ import os
 import sys
 import pylab as p
 import numpy as np
-from electrochemical_methods.basics import Load_data, Table, getFilepath
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 from sklearn.metrics import r2_score
