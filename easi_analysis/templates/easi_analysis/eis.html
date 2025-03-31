@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>EIS Analysis</title>
+</head>
+<body>
+  <h1>Electrochemical Impedance Spectroscopy (EIS) Analysis</h1>
+
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Run Analysis</button>
+  </form>
+
+  {% if result %}
+    <p><strong>{{ result }}</strong></p>
+  {% endif %}
+
+  <p><a href="/">← Back to Home</a></p>
+</body>
+</html>
+

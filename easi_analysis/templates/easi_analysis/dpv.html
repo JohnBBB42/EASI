@@ -1,0 +1,79 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+  <title>DPV Analysis</title>
+</head>
+<body>
+  <h1>Differential Pulse Voltammetry (DPV) Analysis</h1>
+
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <p>
+      {{ form.file.label_tag }}<br>
+      {{ form.file }}
+    </p>
+
+    <p>
+      {{ form.blank_file.label_tag }}<br>
+      {{ form.blank_file }}
+    </p>
+
+    <p>
+      {{ form.selected_analysis.label_tag }}<br>
+      {{ form.selected_analysis }}
+    </p>
+
+    <button type="submit">Run Analysis</button>
+  </form>
+
+  {% if result %}
+    <h3>{{ result }}</h3>
+  {% endif %}
+
+  {% if metrics %}
+    <h3>Mean Peak Currents</h3>
+    <ul>
+    {% for key, val in metrics.mean_peak_currents.items %}
+      <li>{{ key }}: {{ val }}</li>
+    {% endfor %}
+    </ul>
+
+    <h3>Standard Deviations</h3>
+    <ul>
+    {% for key, val in metrics.std_peak_currents.items %}
+      <li>{{ key }}: {{ val }}</li>
+    {% endfor %}
+    </ul>
+
+    <h3>Coefficient of Variation</h3>
+    <ul>
+    {% for key, val in metrics.cov_peak_currents.items %}
+      <li>{{ key }}: {{ val }}</li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+
+  {% if plot_files %}
+    <h3>Generated Plots</h3>
+    <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+      {% for path in plot_files %}
+        <div>
+          <img src="{% static path %}" alt="Plot" style="max-width: 300px;">
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+
+  {% if file_name %}
+    <p style="color: green;">
+      📁 Using previously uploaded file: <strong>{{ file_name }}</strong>
+      <br><em>(You can re-upload to change it)</em>
+    </p>
+  {% endif %}
+
+
+  <p><a href="/">← Back to Home</a></p>
+</body>
+</html>

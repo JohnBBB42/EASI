@@ -1,0 +1,18 @@
+<!-- easi_analysis/templates/easi_analysis/home.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Welcome to EASI Web</title>
+</head>
+<body>
+  <h1>Welcome to the Electrochemical Analysis Web App!</h1>
+  <p>Let’s start analyzing your data.</p>
+
+  <ul>
+    <li><a href="{% url 'cv_analysis' %}">Go to CV Analysis</a></li>
+    <li><a href="{% url 'dpv_analysis' %}">Go to DPV Analysis</a></li>
+    <li><a href="{% url 'eis_analysis' %}">Go to EIS Analysis</a></li>
+  </ul>
+
+</body>
+</html>
