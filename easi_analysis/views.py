@@ -4,6 +4,7 @@ from .utils.analysis_cv import Analysis_CV
 from .utils.analysis_eis import Analysis_EIS
 from .utils.analysis_dpv import Analysis_DPV
 from .utils.plotting_dpv import DPVPlotting
+from .utils.basics import Load_data
 import pandas as pd
 import tempfile
 import os
@@ -65,6 +66,7 @@ def dpv_analysis_view(request):
 
     if request.method == 'POST':
         form = DPVAnalysisForm(request.POST, request.FILES)
+
         if form.is_valid():
             selected_analysis = form.cleaned_data['selected_analysis']
             plot_dir = os.path.join('easi_analysis', 'static', 'easi_analysis', 'plots')
@@ -78,12 +80,21 @@ def dpv_analysis_view(request):
             # ✅ Handle file upload or fallback to session
             if file:
                 file_path = os.path.join(plot_dir, file.name)
+
                 with open(file_path, 'wb+') as dest:
                     for chunk in file.chunks():
                         dest.write(chunk)
                 file_name = file.name
                 request.session['dpv_file_path'] = file_path
                 request.session['dpv_file_name'] = file.name
+
+                # ✅ Now the file exists → it's safe to load it
+                try:
+                    temp_array, headers, metadata = Load_data(file_path)
+                    plot_choices = [(str(i), f"Plot {i//2 + 1}") for i in range(0, len(headers), 2)]
+                    form.fields['selected_plots'].choices = plot_choices
+                except:
+                    pass
             else:
                 file_path = request.session.get('dpv_file_path')
                 file_name = request.session.get('dpv_file_name')
@@ -115,6 +126,10 @@ def dpv_analysis_view(request):
                 results = {}
                 plotter = DPVPlotting()
 
+                selected_plot_indices = form.cleaned_data.get('selected_plots', [])
+                selected_indices = [int(idx) for idx in selected_plot_indices] if selected_plot_indices else None
+
+
                 if selected_analysis == "DPV analysis":
                     results = {
                         'mean_peak_currents': analysis_results.get('mean_peak_currents', {}),
@@ -141,7 +156,8 @@ def dpv_analysis_view(request):
                         analysis_results['data_array'],
                         analysis_results['headers'],
                         analysis_results['parsed_metadata'],
-                        plot_path
+                        plot_path,
+                        selected_indices=selected_indices
                     )
                     plot_filenames.append("easi_analysis/plots/plot_corrected.png")
                     result_message = "✅ Plot Data Array with Corrected Baseline created!"
@@ -150,7 +166,9 @@ def dpv_analysis_view(request):
                     peak_paths = plotter.analyze_peak_currents(
                         analysis_results['mean_peak_currents'],
                         analysis_results['std_peak_currents'],
-                        plot_dir
+                        plot_dir,
+                        selected_indices=selected_indices
+                        
                     )
 
                     for p in peak_paths:
@@ -161,7 +179,8 @@ def dpv_analysis_view(request):
                 elif selected_analysis == "Observed vs Expected Concentration":
                     obs_paths = plotter.plot_observed_vs_expected_concentration(
                         analysis_results['mean_peak_currents'],
-                        plot_dir
+                        plot_dir,
+                        selected_indices=selected_indices
                     )
 
                     for p in obs_paths:
