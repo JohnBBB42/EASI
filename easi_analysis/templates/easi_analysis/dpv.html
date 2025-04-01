@@ -52,6 +52,26 @@
       <li>{{ key }}: {{ val }}</li>
     {% endfor %}
     </ul>
+
+    {% if metrics.t_test_results %}
+      <h3>T-test Results</h3>
+      <ul>
+      {% for result in metrics.t_test_results %}
+        <li>{{ result }}</li>
+      {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% if metrics.lod_results %}
+      <h3>LOD Results</h3>
+      <ul>
+      {% for key, val in metrics.lod_results.items %}
+        <li>{{ key }}: {{ val }}</li>
+      {% endfor %}
+      </ul>
+    {% endif %}
+
+
   {% endif %}
 
   {% if plot_files %}
