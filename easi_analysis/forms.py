@@ -19,5 +19,12 @@ class DPVAnalysisForm(forms.Form):
         label="Select Analysis Type:"
     )
 
+    selected_plots = forms.MultipleChoiceField(
+        choices=[],  # Choices will be added dynamically in the view
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Select Which Plots to Display:"
+    )
+
 class EISAnalysisForm(forms.Form):
     file = forms.FileField(label="Upload your EIS data (CSV or Excel)")
