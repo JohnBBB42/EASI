@@ -3,26 +3,51 @@
 <html>
 <head>
   <title>DPV Analysis</title>
+  <link rel="stylesheet" href="{% static 'easi_analysis/css/styles.css' %}">
+  <style>
+    /* Basic styles for hidden checkbox group */
+    #plot-options {
+      display: none;
+      margin-top: 20px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background-color: #f9f9f9;
+    }
+
+    #plot-checkboxes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    #plot-checkboxes label {
+      width: 120px;
+    }
+  </style>
 </head>
 <body>
   <h1>Differential Pulse Voltammetry (DPV) Analysis</h1>
 
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
-    <p>
-      {{ form.file.label_tag }}<br>
-      {{ form.file }}
-    </p>
 
-    <p>
-      {{ form.blank_file.label_tag }}<br>
-      {{ form.blank_file }}
-    </p>
+    <p>{{ form.file.label_tag }}<br>{{ form.file }}</p>
+    <p>{{ form.blank_file.label_tag }}<br>{{ form.blank_file }}</p>
+    <p>{{ form.selected_analysis.label_tag }}<br>{{ form.selected_analysis }}</p>
 
-    <p>
-      {{ form.selected_analysis.label_tag }}<br>
-      {{ form.selected_analysis }}
-    </p>
+    <!-- ✅ Plot selection section (shown dynamically) -->
+    <div id="plot-options">
+      <h3>Select Plots</h3>
+      <label><input type="checkbox" id="select-all"> Select All</label><br><br>
+      <div id="plot-checkboxes">
+        {% for val, label in form.fields.selected_plots.choices %}
+          <label>
+            <input type="checkbox" name="selected_plots" value="{{ val }}"
+              {% if val in form.selected_plots.value %}checked{% endif %}> {{ label }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
 
     <button type="submit">Run Analysis</button>
   </form>
@@ -33,67 +58,79 @@
 
   {% if metrics %}
     <h3>Mean Peak Currents</h3>
-    <ul>
-    {% for key, val in metrics.mean_peak_currents.items %}
-      <li>{{ key }}: {{ val }}</li>
-    {% endfor %}
-    </ul>
+    <ul>{% for key, val in metrics.mean_peak_currents.items %}<li>{{ key }}: {{ val }}</li>{% endfor %}</ul>
 
     <h3>Standard Deviations</h3>
-    <ul>
-    {% for key, val in metrics.std_peak_currents.items %}
-      <li>{{ key }}: {{ val }}</li>
-    {% endfor %}
-    </ul>
+    <ul>{% for key, val in metrics.std_peak_currents.items %}<li>{{ key }}: {{ val }}</li>{% endfor %}</ul>
 
     <h3>Coefficient of Variation</h3>
-    <ul>
-    {% for key, val in metrics.cov_peak_currents.items %}
-      <li>{{ key }}: {{ val }}</li>
-    {% endfor %}
-    </ul>
+    <ul>{% for key, val in metrics.cov_peak_currents.items %}<li>{{ key }}: {{ val }}</li>{% endfor %}</ul>
 
     {% if metrics.t_test_results %}
       <h3>T-test Results</h3>
-      <ul>
-      {% for result in metrics.t_test_results %}
-        <li>{{ result }}</li>
-      {% endfor %}
-      </ul>
+      <ul>{% for result in metrics.t_test_results %}<li>{{ result }}</li>{% endfor %}</ul>
     {% endif %}
 
     {% if metrics.lod_results %}
       <h3>LOD Results</h3>
-      <ul>
-      {% for key, val in metrics.lod_results.items %}
-        <li>{{ key }}: {{ val }}</li>
-      {% endfor %}
-      </ul>
+      <ul>{% for key, val in metrics.lod_results.items %}<li>{{ key }}: {{ val }}</li>{% endfor %}</ul>
     {% endif %}
-
-
   {% endif %}
 
   {% if plot_files %}
     <h3>Generated Plots</h3>
     <div style="display: flex; flex-wrap: wrap; gap: 20px;">
       {% for path in plot_files %}
-        <div>
-          <img src="{% static path %}" alt="Plot" style="max-width: 300px;">
-        </div>
+        <div><img src="{% static path %}" alt="Plot" style="max-width: 300px;"></div>
       {% endfor %}
     </div>
   {% endif %}
 
-
   {% if file_name %}
     <p style="color: green;">
-      📁 Using previously uploaded file: <strong>{{ file_name }}</strong>
-      <br><em>(You can re-upload to change it)</em>
+      📁 Using previously uploaded file: <strong>{{ file_name }}</strong><br>
+      <em>(You can re-upload to change it)</em>
     </p>
   {% endif %}
 
-
   <p><a href="/">← Back to Home</a></p>
+
+  <!-- ✅ Include logic for toggling plot selection -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const dropdown = document.querySelector('[name="selected_analysis"]');
+      const plotOptions = document.getElementById('plot-options');
+      const selectAll = document.getElementById('select-all');
+      const checkboxes = document.querySelectorAll('#plot-checkboxes input[type="checkbox"]');
+
+      const plotAnalyses = [
+        "Plot Data Array with Corrected Baseline",
+        "Analyze Peak Currents",
+        "Observed vs Expected Concentration"
+      ];
+
+      function togglePlotOptions(val) {
+        if (plotAnalyses.includes(val)) {
+          plotOptions.style.display = "block";
+        } else {
+          plotOptions.style.display = "none";
+        }
+      }
+
+      if (dropdown) {
+        togglePlotOptions(dropdown.value);
+        dropdown.addEventListener("change", function () {
+          togglePlotOptions(this.value);
+        });
+      }
+
+      if (selectAll) {
+        selectAll.addEventListener("change", function () {
+          checkboxes.forEach(cb => cb.checked = this.checked);
+        });
+      }
+    });
+  </script>
+
 </body>
 </html>
