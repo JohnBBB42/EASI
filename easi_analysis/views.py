@@ -63,161 +63,120 @@ def dpv_analysis_view(request):
     result_message = None
     results = None
     plot_filenames = []
+    plot_choices = [] 
+    analysis_results = None
 
-    if request.method == 'POST':
-        form = DPVAnalysisForm(request.POST, request.FILES)
+    # If a file has been uploaded previously, retrieve its path from session.
+    file_path = request.session.get('dpv_file_path')
+    blank_path = request.session.get('dpv_blank_path')  # optional blank file path
+    file_name = request.session.get('dpv_file_name')
 
-        if form.is_valid():
-            selected_analysis = form.cleaned_data['selected_analysis']
-            plot_dir = os.path.join('easi_analysis', 'static', 'easi_analysis', 'plots')
-            os.makedirs(plot_dir, exist_ok=True)
-            for f in os.listdir(plot_dir):
-                os.remove(os.path.join(plot_dir, f))  # Clear old plots
+    # If uploaded previously, run initial analysis and populate plot choices
+    if file_path and os.path.exists(file_path):
+        try:
+            blank_array = np.loadtxt(blank_path, delimiter=',') if blank_path else None
+            analysis_results = Analysis_DPV(file_path, blank_responses=blank_array)
+            headers = analysis_results.get('headers', [])
+            plot_choices = [(str(i), f"Plot {i // 2 + 1}") for i in range(0, len(headers), 2)]
+        except Exception as e:
+            result_message = f"⚠️ Initial analysis error: {e}"
 
-            file = request.FILES.get('file')  # get() won't crash if not present
-            blank_file = request.FILES.get('blank_file')
+    # Dynamic form with plot choices
+    class DynamicDPVForm(DPVAnalysisForm): pass
+    DynamicDPVForm.base_fields['selected_plots'].choices = plot_choices
+    form = DynamicDPVForm(request.POST or None, request.FILES or None)
 
-            # ✅ Handle file upload or fallback to session
-            if file:
-                file_path = os.path.join(plot_dir, file.name)
+    if request.method == 'POST' and form.is_valid():
+        selected_analysis = form.cleaned_data['selected_analysis']
+        plot_dir = os.path.join('easi_analysis', 'static', 'easi_analysis', 'plots')
+        os.makedirs(plot_dir, exist_ok=True)
+        [os.remove(os.path.join(plot_dir, f)) for f in os.listdir(plot_dir)]
 
-                with open(file_path, 'wb+') as dest:
-                    for chunk in file.chunks():
-                        dest.write(chunk)
-                file_name = file.name
-                request.session['dpv_file_path'] = file_path
-                request.session['dpv_file_name'] = file.name
+        file = request.FILES.get('file')
+        blank_file = request.FILES.get('blank_file')
 
-                # ✅ Now the file exists → it's safe to load it
-                try:
-                    temp_array, headers, metadata = Load_data(file_path)
-                    plot_choices = [(str(i), f"Plot {i//2 + 1}") for i in range(0, len(headers), 2)]
-                    form.fields['selected_plots'].choices = plot_choices
-                except:
-                    pass
-            else:
-                file_path = request.session.get('dpv_file_path')
-                file_name = request.session.get('dpv_file_name')
-                if not file_path or not os.path.exists(file_path):
-                    result_message = "❌ No file selected and no previous file found."
-                    return render(request, 'easi_analysis/dpv.html', {
-                        'form': form,
-                        'result': result_message,
-                        'metrics': None,
-                        'plot_files': [],
-                        'file_name': None
-                    })
+        if file:
+            file_path = os.path.join(plot_dir, file.name)
+            with open(file_path, 'wb+') as dest:
+                for chunk in file.chunks():
+                    dest.write(chunk)
+            file_name = file.name
+            request.session['dpv_file_path'] = file_path
+            request.session['dpv_file_name'] = file.name
 
-            # ✅ Handle blank file as usual
-            blank_array = None
-            if blank_file:
-                blank_path = os.path.join(plot_dir, blank_file.name)
-                with open(blank_path, 'wb+') as dest:
-                    for chunk in blank_file.chunks():
-                        dest.write(chunk)
-                try:
-                    blank_array = np.loadtxt(blank_path, delimiter=',')
-                except Exception as e:
-                    result_message = f"Blank file failed to load: {e}"
+        if blank_file:
+            blank_path = os.path.join(plot_dir, blank_file.name)
+            with open(blank_path, 'wb+') as dest:
+                for chunk in blank_file.chunks():
+                    dest.write(chunk)
+            request.session['dpv_blank_path'] = blank_path
 
-            # ✅ Analysis logic (same as before)
-            try:
-                analysis_results = Analysis_DPV(file_path, blank_responses=blank_array)
-                results = {}
-                plotter = DPVPlotting()
+        try:
+            blank_array = np.loadtxt(blank_path, delimiter=',') if blank_path else None
+            analysis_results = Analysis_DPV(file_path, blank_responses=blank_array)
+            plotter = DPVPlotting()
+            selected_indices = [int(i) for i in form.cleaned_data.get('selected_plots', []) or []]
 
-                selected_plot_indices = form.cleaned_data.get('selected_plots', [])
-                selected_indices = [int(idx) for idx in selected_plot_indices] if selected_plot_indices else None
+            # Process analysis depending on the selected method
+            if selected_analysis == "DPV analysis":
+                results = {
+                    'mean_peak_currents': analysis_results.get('mean_peak_currents', {}),
+                    'std_peak_currents': analysis_results.get('std_peak_currents', {}),
+                    'cov_peak_currents': analysis_results.get('cov_peak_currents', {})
+                }
+                result_message = "✅ DPV Analysis completed!"
 
+            elif selected_analysis == "LOD Analysis":
+                results = {
+                    'lod_results': analysis_results.get('lod_results', {})
+                }
+                result_message = "✅ LOD Analysis completed!"
 
-                if selected_analysis == "DPV analysis":
-                    results = {
-                        'mean_peak_currents': analysis_results.get('mean_peak_currents', {}),
-                        'std_peak_currents': analysis_results.get('std_peak_currents', {}),
-                        'cov_peak_currents': analysis_results.get('cov_peak_currents', {})
-                    }
-                    result_message = "✅ DPV Analysis completed!"
+            elif selected_analysis == "T-test Analysis":
+                results = {
+                    't_test_results': analysis_results.get('t_test_results', [])
+                }
+                result_message = "✅ T-test Analysis completed!"
+            elif selected_analysis == "Plot Data Array with Corrected Baseline":
+                plot_path = os.path.join(plot_dir, "plot_corrected.png")
+                plotter.plot_data_array_with_corrected_baseline(
+                    analysis_results['data_array'],
+                    analysis_results['headers'],
+                    analysis_results['parsed_metadata'],
+                    plot_path,
+                    selected_indices=selected_indices
+                )
+                plot_filenames.append(f"easi_analysis/plots/{os.path.basename(plot_path)}")
+                result_message = "✅ Plot created!"
 
-                elif selected_analysis == "LOD Analysis":
-                    results = {
-                        'lod_results': analysis_results.get('lod_results', {})
-                    }
-                    result_message = "✅ LOD Analysis completed!"
+            elif selected_analysis == "Analyze Peak Currents":
+                peak_paths = plotter.analyze_peak_currents(
+                    analysis_results['mean_peak_currents'],
+                    analysis_results['std_peak_currents'],
+                    plot_dir,
+                    selected_indices=selected_indices
+                )
+                plot_filenames.extend([f"easi_analysis/plots/{os.path.basename(p)}" for p in peak_paths])
+                result_message = "✅ Peak plots created!"
 
-                elif selected_analysis == "T-test Analysis":
-                    results = {
-                        't_test_results': analysis_results.get('t_test_results', [])
-                    }
-                    result_message = "✅ T-test Analysis completed!"
+            elif selected_analysis == "Observed vs Expected Concentration":
+                obs_paths = plotter.plot_observed_vs_expected_concentration(
+                    analysis_results['mean_peak_currents'],
+                    plot_dir,
+                    selected_indices=selected_indices
+                )
+                plot_filenames.extend([f"easi_analysis/plots/{os.path.basename(p)}" for p in obs_paths])
+                result_message = "✅ Observed vs Expected plots created!"
 
-                elif selected_analysis == "Plot Data Array with Corrected Baseline":
-                    plot_path = os.path.join(plot_dir, "plot_corrected.png")
-                    plotter.plot_data_array_with_corrected_baseline(
-                        analysis_results['data_array'],
-                        analysis_results['headers'],
-                        analysis_results['parsed_metadata'],
-                        plot_path,
-                        selected_indices=selected_indices
-                    )
-                    plot_filenames.append("easi_analysis/plots/plot_corrected.png")
-                    result_message = "✅ Plot Data Array with Corrected Baseline created!"
-
-                elif selected_analysis == "Analyze Peak Currents":
-                    peak_paths = plotter.analyze_peak_currents(
-                        analysis_results['mean_peak_currents'],
-                        analysis_results['std_peak_currents'],
-                        plot_dir,
-                        selected_indices=selected_indices
-                        
-                    )
-
-                    for p in peak_paths:
-                        # ✅ No need to copy again — it's already saved in plot_dir
-                        plot_filenames.append("easi_analysis/plots/" + os.path.basename(p))
-                    result_message = "✅ Peak currents plot created!"
-
-                elif selected_analysis == "Observed vs Expected Concentration":
-                    obs_paths = plotter.plot_observed_vs_expected_concentration(
-                        analysis_results['mean_peak_currents'],
-                        plot_dir,
-                        selected_indices=selected_indices
-                    )
-
-                    for p in obs_paths:
-                        plot_filenames.append("easi_analysis/plots/" + os.path.basename(p))
-                    result_message = "✅ Observed vs Expected plot created!"
-
-
-
-                # 🖼 Plot copying (unchanged)
-                if 'plot_filenames' in analysis_results:
-                    for key, file_or_list in analysis_results['plot_filenames'].items():
-                        if isinstance(file_or_list, list):
-                            for i, file_path in enumerate(file_or_list):
-                                if os.path.exists(file_path):
-                                    filename = f"{key}_{i+1}.png"
-                                    new_path = os.path.join(plot_dir, filename)
-                                    shutil.copy(file_path, new_path)
-                                    plot_filenames.append(f"easi_analysis/plots/{filename}")
-                        else:
-                            if os.path.exists(file_or_list):
-                                filename = f"{key}.png"
-                                new_path = os.path.join(plot_dir, filename)
-                                shutil.copy(file_or_list, new_path)
-                                plot_filenames.append(f"easi_analysis/plots/{filename}")
-
-            except Exception as e:
-                result_message = f"❌ DPV Analysis failed: {e}"
-
-    else:
-        form = DPVAnalysisForm()
+        except Exception as e:
+            result_message = f"❌ Analysis failed: {e}"
 
     return render(request, 'easi_analysis/dpv.html', {
         'form': form,
         'result': result_message,
         'metrics': results,
         'plot_files': plot_filenames,
-        'file_name': file_name if 'file_name' in locals() else request.session.get('dpv_file_name')
+        'file_name': file_name or request.session.get('dpv_file_name')
     })
 
 
