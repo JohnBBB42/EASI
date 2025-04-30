@@ -20,117 +20,121 @@ from scipy.stats import t, linregress
 from scipy.signal import find_peaks, savgol_filter
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
+import warnings
 
 class CustomValueError(Exception):
     """Custom error for handling specific value errors."""
     def __init__(self, message="An invalid value was provided."):
         super().__init__(message)
 
-def Analysis_DPV(file_path, blank_responses=None):
+def Analysis_DPV(file_path, blank_responses=None, metadata_fields=None):
     #_________________________________________
     # DEFINE FUNCTIONS
     #_________________________________________
 
-    def load_data_and_metadata(file_path):
-        # Function to read lines from the file
-        def read_file_lines(file_path, encoding='utf-16'):
-            with open(file_path, 'r', encoding=encoding) as file:
+    #---------------------------
+    # Flexible metadata loading function
+    #---------------------------
+    def load_data_and_metadata(file_path, metadata_fields=None, encoding='utf-16', metadata_header_index=3, metadata_delimiter=",,"):
+        """
+        Load the file, extract and validate metadata using a flexible naming scheme,
+        and load the accompanying numerical data.
+
+        Parameters:
+            file_path (str): Path to the file.
+            metadata_fields (list, optional): Expected metadata field names.
+                Default is ["Electrode", "Analytes", "Concentration", "Method"].
+            encoding (str): File encoding. Default 'utf-16'.
+            metadata_header_index (int): Row index for the metadata header (default is 3, i.e. the fourth line).
+            metadata_delimiter (str): Delimiter between metadata entries (default is ",,").
+
+        Returns:
+            tuple: (headers, data_array, parsed_metadata) on success; (None, None, None) if errors occur.
+        """
+        if metadata_fields is None:
+            metadata_fields = ["Electrode", "Analytes", "Concentration", "Method"]
+
+        # ---------------------------
+        # Helper functions (unchanged except for flexibility)
+        # ---------------------------
+        def read_file_lines(fp, encoding=encoding):
+            with open(fp, 'r', encoding=encoding) as file:
                 return file.readlines()
 
-        def extract_metadata_row(lines, index=3):
-            # Get the fourth row, remove leading 'Metadata row: ' if present
+        def extract_metadata_row(lines, index=metadata_header_index, delimiter=metadata_delimiter):
             metadata_row = lines[index].strip()
             metadata_row = re.sub(r'^Metadata row: ', '', metadata_row)
-            metadata_entries = metadata_row.split(',,')
-
-            # Clean each metadata entry by removing everything after 'DPV'
-            cleaned_metadata_entries = []
+            metadata_entries = [entry.strip() for entry in metadata_row.split(delimiter) if entry.strip()]
+            cleaned_entries = []
             missing_parts = []
             for entry in metadata_entries:
-                entry = entry.strip()  # Remove leading/trailing whitespace
-
-                # If 'DPV' exists, remove everything after it
+                entry = entry.strip()
                 if 'DPV' in entry:
                     entry = entry.split('DPV')[0] + 'DPV'
                 else:
                     missing_parts.append("Method")
-                cleaned_metadata_entries.append(entry)
-            # Filter out any empty strings that might exist due to trailing delimiters
-            cleaned_metadata_entries = [entry for entry in cleaned_metadata_entries if entry]
-            return cleaned_metadata_entries, missing_parts
-        
+                cleaned_entries.append(entry)
+            return cleaned_entries, missing_parts
+
         def validate_metadata_entry(entry, entry_number, missing_parts):
-            for entry_number, entry in enumerate(metadata_entries, start=1):
-                entry_to_validate = re.sub(r'PP_', '', entry)
-                parts_to_validate = entry_to_validate.split('_')
-
-                # Check if parts_to_validate has at least 1 part to access index [0]
-                if len(parts_to_validate) > 0:
-                    if '-' in parts_to_validate[0]:
-                        missing_parts.append("Electrode")
-
-                # Check if parts_to_validate has at least 2 parts to access index [1]
-                if len(parts_to_validate) > 1:
-                    if '-' not in parts_to_validate[1]:
-                        if any(char.isdigit() for char in parts_to_validate[1]):
-                            missing_parts.append("Analytes")
-                        else:
-                            missing_parts.append("Concentration")
-                
-                if len(parts_to_validate) > 2:
-                    if 'DPV' not in entry:
-                        missing_parts.append("Method")
-
-                # Raise an error if there are missing parts
-                if missing_parts:
-                    raise CustomValueError(f"Error in Entry #{entry_number}: Entry is missing required components: {', '.join(missing_parts)}. Expected format: 'Electrode_Analytes-Concentration_Method'.")
+            # (Exactly as in your original code)
+            entry_to_validate = re.sub(r'PP_', '', entry)
+            parts_to_validate = entry_to_validate.split('_')
+            if len(parts_to_validate) > 0:
+                if '-' in parts_to_validate[0]:
+                    missing_parts.append("Electrode")
+            if len(parts_to_validate) > 1:
+                if '-' not in parts_to_validate[1]:
+                    if any(char.isdigit() for char in parts_to_validate[1]):
+                        missing_parts.append("Analytes")
+                    else:
+                        missing_parts.append("Concentration")
+            if len(parts_to_validate) > 2:
+                if 'DPV' not in entry:
+                    missing_parts.append("Method")
+            if missing_parts:
+                raise CustomValueError(f"Error in Entry #{entry_number}: Entry is missing required components: {', '.join(missing_parts)}. Expected format: {'_'.join(metadata_fields)}.")
 
         def clean_metadata_entry(entry):
+            # Exactly as in your original code
             entry = re.sub(r'PP_', '', entry)
             entry = entry.replace('-', '_')
             parts = entry.split('_')
-            entry = '_'.join(parts[:4])
+            # Here, we use only as many parts as defined by metadata_fields
+            entry = '_'.join(parts[:len(metadata_fields)])
             return entry
 
         def parse_metadata_entry(entry):
             parts = entry.split('_')
-            return {
-                'Electrode': parts[0],
-                'Analytes': parts[1],
-                'Concentration': parts[2],
-                'Method': parts[3]
-            }
+            # Assume len(parts) is >= len(metadata_fields)
+            return {field: part for field, part in zip(metadata_fields, parts)}
 
-        def load_and_clean_data(file_path, encoding='utf-16', header_index=4, metadata_identifiers=['Date and time measurement:']):
-            with open(file_path, 'r', encoding=encoding) as file:
+        def load_and_clean_data(fp, encoding=encoding, header_index=4, metadata_identifiers=['Date and time measurement:']):
+            with open(fp, 'r', encoding=encoding) as file:
                 reader = csv.reader(file)
                 data = list(reader)[header_index + 1:]
-
             headers = data[0]
             data_cleaned = [row for row in data if not any(identifier in row[0] for identifier in metadata_identifiers)]
             valid_data = [row for row in data_cleaned[1:] if len(row) == len(headers)]
-
             return headers, valid_data
 
-        def convert_data_to_array(valid_data):
-            def safe_float_convert(value):
-                try:
-                    return float(value)
-                except ValueError:
-                    return np.nan
-            return np.array([[safe_float_convert(cell) for cell in row] for row in valid_data])
+        def safe_float_convert(value):
+            try:
+                return float(value)
+            except ValueError:
+                return np.nan
 
-        # Read lines from the file
+        def convert_data_to_array(data_rows):
+            return np.array([[safe_float_convert(cell) for cell in row] for row in data_rows])
+        
+        # --- Execute the metadata and data loading ---
         lines = read_file_lines(file_path)
 
-        # Extract and clean metadata
         metadata_entries, missing_parts = extract_metadata_row(lines)
+        # Make a second call to get a separate copy for validation:
         metadata_entries_val, missing_parts = extract_metadata_row(lines)
         
-        # Validate Metadata Entries - Loop through all entries and stop if all are valid
-        entry_number = []
         error_occurred = False
-
         try:
             for entry_number, entry in enumerate(metadata_entries_val, start=1):
                 validate_metadata_entry(entry, entry_number, missing_parts)
@@ -139,18 +143,16 @@ def Analysis_DPV(file_path, blank_responses=None):
             error_occurred = True
 
         if not error_occurred:
-            # Clean metadata entries and parse metadata
+            # Clean each metadata entry and then parse it
             cleaned_metadata_entries = [clean_metadata_entry(entry) for entry in metadata_entries]
             parsed_metadata = [parse_metadata_entry(entry) for entry in cleaned_metadata_entries]
-
-            # Load and clean the data
-            headers, valid_data = load_and_clean_data(file_path)
-            data_array = convert_data_to_array(valid_data)
-
-            return headers, data_array, parsed_metadata
         else:
             print("Stopping due to validation error. No further processing will be performed, check your dataset.")
             return None, None, None
+
+        headers, valid_data = load_and_clean_data(file_path)
+        data_array = convert_data_to_array(valid_data)
+        return headers, data_array, parsed_metadata
 
     def find_peaks_and_process_data(headers, data_array, parsed_metadata):
         voltage_columns = [i for i, col in enumerate(headers) if 'V' in col]
@@ -281,27 +283,66 @@ def Analysis_DPV(file_path, blank_responses=None):
             cov_peak_currents[key] = covs
 
         return cov_peak_currents, mean_peak_currents, std_peak_currents
-
+    
     def calculate_lod(mean_peak_currents, blank_responses=None):
         if blank_responses is None:
             blank_responses = [0.1, 0.15, 0.05, 0.1, 0.08]
         
-        lod_results = {}
         std_blank = np.std(blank_responses)
+        lod_results = {}
         analytes_dict = defaultdict(list)
-        for key, mean_peak_current in mean_peak_currents.items():
-            concentration, analytes = key
-            analytes_dict[analytes].append((float(concentration[:-2]), mean_peak_current))
-        
+
+        # Build a dict: analyte -> list of (concentration_float, [peak1, peak2, ...])
+        for (conc_str, analytes), peak_list in mean_peak_currents.items():
+            try:
+                # strip off unit, e.g. "50µM" → 50.0
+                c_val = float(conc_str.rstrip('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZµμ'))
+            except ValueError:
+                continue
+            analytes_dict[analytes].append((c_val, peak_list))
+
         for analytes, data in analytes_dict.items():
+            # sort by concentration
             data.sort(key=lambda x: x[0])
-            concentrations, mean_peak_currents = zip(*data)
-            for i, mean_peak_current in enumerate(zip(*mean_peak_currents)):
-                log_concentrations = np.log10(concentrations)
-                slope, intercept, r_value, p_value, std_err = linregress(log_concentrations, mean_peak_current)
-                lod = (3.3 * std_blank) / slope
-                lod_results[(analytes, f'Peak {i+1}')] = lod
-        
+            concs, peaks_matrix = zip(*data)
+            n_points = len(concs)
+
+            if n_points < 2:
+                warnings.warn(
+                    f"Cannot calculate LOD for '{analytes}': only {n_points} concentration point(s).",
+                    RuntimeWarning
+                )
+                # still reserve keys, but set to nan
+                n_peaks = len(peaks_matrix[0])
+                for i in range(n_peaks):
+                    lod_results[(analytes, f"Peak {i+1}")] = np.nan
+                continue
+
+            log_concs = np.log10(np.array(concs, dtype=float) + 1e-12)
+            if np.allclose(log_concs, log_concs[0]):
+                warnings.warn(
+                    f"Zero variance in log(conc) for '{analytes}'; skipping LOD.",
+                    RuntimeWarning
+                )
+                for i in range(len(peaks_matrix[0])):
+                    lod_results[(analytes, f"Peak {i+1}")] = np.nan
+                continue
+
+            # now loop over each peak position
+            for peak_idx, peak_vals in enumerate(zip(*peaks_matrix), start=1):
+                y = np.array(peak_vals, dtype=float)
+                # if all y are the same, slope=0 → skip
+                slope, intercept, r_val, p_val, stderr = linregress(log_concs, y)
+                if slope == 0 or np.isnan(slope):
+                    warnings.warn(
+                        f"Slope zero or NaN for '{analytes}' peak {peak_idx}; LOD undefined.",
+                        RuntimeWarning
+                    )
+                    lod_results[(analytes, f"Peak {peak_idx}")] = np.nan
+                else:
+                    lod = (3.3 * std_blank) / slope
+                    lod_results[(analytes, f"Peak {peak_idx}")] = lod
+
         return lod_results
 
     def perform_t_tests(mean_peak_currents, std_peak_currents, sample_size=None):
@@ -356,13 +397,11 @@ def Analysis_DPV(file_path, blank_responses=None):
         
         return t_test_results
 
-    # Main execution
-    headers, data_array, parsed_metadata = load_data_and_metadata(file_path)
+    # Main execution using the new loader:
+    headers, data_array, parsed_metadata = load_data_and_metadata(file_path, metadata_fields=metadata_fields)
 
-    # Check if any of the returned values are None
     if headers is None or data_array is None or parsed_metadata is None:
-        results = mean_peak_currents = std_peak_currents = cov_peak_currents = lod_results = t_test_results = None
-        return results
+        return None
     else:
         results = find_peaks_and_process_data(headers, data_array, parsed_metadata)
         cov_peak_currents, mean_peak_currents, std_peak_currents = calculate_cov_peak_currents(results)

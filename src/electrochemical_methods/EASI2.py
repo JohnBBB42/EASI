@@ -15,6 +15,8 @@ sys.path.append(dname)
 
 # Import packages
 import csv
+import json
+import pandas as pd
 import tempfile
 import numpy as np
 import tkinter as tk
@@ -433,6 +435,16 @@ class DPVApp:
 
         self.clicked.trace("w", self.change)  # track if something happens to variable
         
+        # ------------------------
+        # Add Metadata Fields Entry:
+        # ------------------------
+        self.metadata_fields_label = Label(self.main_frame, text="Metadata Fields (comma separated):")
+        self.metadata_fields_label.pack(padx=10, pady=5)
+        self.metadata_fields_entry = Entry(self.main_frame)
+        # Set a default string that represents the default field names
+        self.metadata_fields_entry.insert(END, "Electrode,Analytes,Concentration,Method")
+        self.metadata_fields_entry.pack(padx=10, pady=5)
+
         #-------------------------
         # Import file(s)
         #-------------------------
@@ -504,24 +516,226 @@ class DPVApp:
         self.save_as_button = Button(self.main_frame, text="Save Results", command=self.save_results, state=tk.DISABLED)
         self.save_as_button.pack(pady=10)
 
-    def import_file(self):
-        self.filepath = filedialog.askopenfilename(
-            filetypes=[("CSV files", "*.csv"), ("Excel files", "*.xlsx;*.xls")]
-        )
-        if self.filepath:
-            self.file_path_label.config(text=self.filepath)
 
-            # Automatically run Analysis_DPV and store its result
-            self.analysis_results = Analysis_DPV(self.filepath)
-            if not self.analysis_results:
-                messagebox.showwarning("Load Failure", "Could not analyze the selected file.")
-            else:
-                # Optionally, enable the Save Results button now
-                self.save_as_button.config(state=tk.NORMAL)
+    # ---------------------------------------------------------
+    # helper: show what goes into Analysis_DPV
+    # ---------------------------------------------------------
+    def _debug_dump(self, csv_path: str, n_lines: int = 12) -> None:
+        print("\n=== DEBUG — first lines of temp CSV ===")
+        with open(csv_path, "r", encoding="utf-16") as f:
+            for i in range(n_lines):
+                try:
+                    print(f"{i:2}: {next(f).rstrip()}")
+                except StopIteration:
+                    break
+        print("=== end preview =====================================\n")
+
+    # ---------------------------------------------------------
+    # robust .pssession loader  (works for your 1. S0_Donor Q file)
+    # ---------------------------------------------------------
+    def load_pssession(self, path: str) -> tuple[pd.DataFrame, int]:
+        """
+        Return (dataframe, n_replicates).
+
+        The dataframe columns are:
+            Potential (V)           – replicate 1
+            Current (µA)            – replicate 1
+            Potential (V)_2         – replicate 2
+            Current (µA)_2          – replicate 2
+            …
+        """
+        import json
+
+        # ---------- read & isolate JSON header ----------------
+        with open(path, "r", encoding="utf-16") as f:
+            txt = f.read()
+
+        start = txt.find("{")
+        depth = 0
+        for i, ch in enumerate(txt[start:], start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        sess = json.loads(txt[start : end + 1])
+
+        # ---------- gather *all* DPV curves -------------------
+        curves = []
+        for m in sess["Measurements"]:
+            if "METHOD_ID=DPV" not in m.get("Method", "").upper():
+                continue
+            curves.extend(m.get("Curves", []))
+
+        if not curves:
+            raise ValueError("No DPV curves in session")
+
+        columns = {}
+        for idx, curve in enumerate(curves, start=1):
+            # Try RawDataArray first --------------------------
+            raw = curve.get("RawDataArray") or {}
+            X = raw.get("Potential") or raw.get("X")
+            Y = raw.get("Current")   or raw.get("Y")
+
+            # Fallback: XAxisDataArray / YAxisDataArray -------
+            if X is None or Y is None:
+                xb = curve.get("XAxisDataArray") or {}
+                yb = curve.get("YAxisDataArray") or {}
+                X = xb.get("DataValues")
+                Y = yb.get("DataValues")
+                if X and isinstance(X[0], dict):
+                    X = [float(d["V"]) for d in X]
+                    Y = [float(d["V"]) for d in Y]
+
+            if X is None or Y is None or len(X) != len(Y):
+                raise ValueError(f"Curve #{idx} has inconsistent arrays")
+
+            # Column names: first pair has no suffix, the rest “_2”, “_3”…
+            suf = "" if idx == 1 else f"_{idx}"
+            columns[f"Potential (V){suf}"] = X
+            columns[f"Current (µA){suf}"]  = Y
+
+        df = pd.DataFrame(columns)
+        print(f"→ Loaded {len(curves)} curve(s), {len(df)} points each")
+        return df, len(curves)
+    
+    def import_file(self):
+
+        """
+        Import a data file (CSV, Excel, or PalmSens session) and integrate metadata extraction for DPV measurements.
+        """
+        # Prompt user for file selection (CSV, Excel, or .pssession)
+        self.filepath = filedialog.askopenfilename(
+            filetypes=[
+                ("All files", "*.*"),
+                ("PalmSens session", "*.pssession"),
+                ("CSV files", "*.csv"),
+                ("Excel files", "*.xlsx;*.xls"),
+            ]
+        )
+        if not self.filepath:
+            # No file selected, exit early
+            self.file_path_label.config(text="No file selected")
+            self.analysis_results = None
+            return
+
+        # Update the GUI label to show the selected file path
+        self.file_path_label.config(text=self.filepath)
+
+        # 1) figure out which metadata fields to extract
+        custom_fields = [
+            f.strip() for f in 
+            self.metadata_fields_entry.get().split(',')
+            if f.strip()
+        ]
+        if not custom_fields:
+            custom_fields = ["Electrode","Analytes","Concentration","Method"]
+
+        ext = os.path.splitext(self.filepath)[1].lower()
+        if ext == '.pssession':
+            try:
+                # --- load the DPV curve itself ---
+                df, n_reps = self.load_pssession(self.filepath)
+
+                # --- grab the Title from the JSON for metadata ---
+                with open(self.filepath, 'r', encoding='utf-16') as f:
+                    txt = f.read()
+                start = txt.find('{'); brace = 0; end = None
+                for i,ch in enumerate(txt[start:], start):
+                    if   ch=='{': brace += 1
+                    elif ch=='}': brace -= 1
+                    if brace==0:
+                        end = i
+                        break
+                sess    = json.loads(txt[start:end+1])
+                dpv_meas= next(m for m in sess["Measurements"]
+                              if "METHOD_ID=DPV" in m.get("Method","").upper())
+                raw_title = dpv_meas.get("Title","").strip()
+                print("DEBUG raw Title:", raw_title)
+
+                # --- strip the leading "1. ", then cut off at "_DPV" ---
+                body     = raw_title.split('. ',1)[-1]
+                name_only= body.split('_DPV',1)[0]
+
+                # --- split into exactly (N-1) pieces, N = len(custom_fields) ---
+                n_meta   = len(custom_fields)
+                parts    = name_only.split('_', n_meta-1)
+
+                # --- pad to (N-1) tokens if needed ---
+                while len(parts) < n_meta-1:
+                    parts.append("")
+
+                # --- finally tack on "DPV" as the Method field ---
+                parts.append("DPV")
+
+                # --- join back to one Metadata row entry ---
+
+                #meta_entry = "_".join(parts)
+                meta_entry_single = "_".join(parts)
+                meta_entry = ",,".join([meta_entry_single] * n_reps)
+                print("DEBUG meta_entry:", meta_entry)
+
+                
+                with tempfile.NamedTemporaryFile(
+                        suffix='.csv', delete=False,
+                        mode='w', encoding='utf-16', newline=''
+                ) as tmp:
+                    tmp.write("\n"*3)                   # 0-3: blank lines
+                    tmp.write(f"Metadata row: {meta_entry}\n")   # 4: metadata
+                    tmp.write("Date and time measurement: \n") 
+                    df.to_csv(tmp, index=False, header=True)      # 5-…: header + data
+                    tmp_path = tmp.name
+
+                # --- write out tiny UTF-16 CSV with 3 blank lines + that metadata row ---
+                #tmp = tempfile.NamedTemporaryFile(
+                #    suffix='.csv', delete=False,
+                #    mode='w', encoding='utf-16', newline=''
+                #)
+                #tmp.write("\n"*4)
+                #tmp.write(f"Metadata row: {meta_entry}\n")
+                #df.to_csv(tmp.name, index=False, header=True, encoding='utf-16')
+                #tmp_path = tmp.name
+                #tmp.close()
+
+                # (optional) quick preview
+                print("=== Temp CSV Preview ===")
+                with open(tmp_path, 'r', encoding='utf-16') as dbg:
+                    for _ in range(5):
+                        line = dbg.readline()
+                        if not line: break
+                        print(line.strip())
+                print("=== End Preview ===")
+
+                file_to_pass = tmp_path
+
+            except Exception as e:
+                messagebox.showerror(
+                    "Load Error",
+                    f"Couldn’t parse session file:\n{e}"
+                )
+                self._debug_dump(file_to_pass)
+
+                self.analysis_results = None
+                return
 
         else:
-            self.file_path_label.config(text="No file selected")
-            self.analysis_results = None  # Clear out old results if user canceled
+            file_to_pass = self.filepath
+
+        # 2) hand it off to your unchanged DPV loader
+        self.analysis_results = Analysis_DPV(
+            file_to_pass,
+            metadata_fields=custom_fields
+        )
+        if not self.analysis_results:
+            messagebox.showwarning(
+                "Load Failure",
+                "Could not analyze the selected file.\n"
+                "Please check the file format and metadata."
+            )
+        else:
+            self.save_as_button.config(state=tk.NORMAL)
 
 
     def import_blank_file(self):
@@ -903,8 +1117,6 @@ class DPVApp:
             for var in self.plot_vars:
                 var.set(0)
 
-
-
     def plot_selected(self, analysis_option):
         selected_indices = [i * 2 for i, var in enumerate(self.plot_vars) if var.get()]
         print(f"Selected plots for {analysis_option}: {selected_indices}")
@@ -1198,11 +1410,6 @@ class DPVApp:
             plot_filenames.append(filename)
 
         return plot_filenames
-
-
-    
-
-
 
 
 #_____________________________
