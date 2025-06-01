@@ -4,7 +4,7 @@ typer==0.15.1
 fastapi==0.115.6
 uvicorn==0.34.0
 gunicorn==23.0.0
-Django==5.1.7
+Django==5.2.1
 matplotlib==3.10.0
 python-dotenv==1.0.1
 #pytorch_lightning==2.5.0.post0
