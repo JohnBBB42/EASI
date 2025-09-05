@@ -14,221 +14,355 @@ os.chdir(dname)
 sys.path.append(dname)
 
 # Import packages
-import csv
-import json
-import pandas as pd
-import tempfile
-import numpy as np
 import tkinter as tk
-from scipy.signal import find_peaks
-from collections import defaultdict
-from scipy import sparse
-from scipy.sparse.linalg import spsolve
-from scipy.stats import linregress
-from tkinter import ttk
-import pandas as pd
 from tkinter import Button, END, Entry, Label, LabelFrame, OptionMenu, StringVar, messagebox, Toplevel, filedialog
 import hashlib
 from PIL import Image
 from matplotlib import pyplot as plt
+import numpy as np
 
 from electrochemical_methods.Analysis_CV import Analysis_CV
 from electrochemical_methods.Analysis_DPV import Analysis_DPV
 from electrochemical_methods.Analysis_EIS import Analysis_EIS
 from electrochemical_methods.Plotting import Plots_all_imported
 
+
+#_____________________________
+# GUI setup
+#_____________________________
 class CVApp:
-    def __init__(self, master):
+    def __init__(self,master):
         self.master = master
-        master.title("CV Analysis")
-        master.geometry("500x300")
+        master.title('CV analysis')
+        master.geometry("500x400")
 
-        self.df = None                # We'll store the loaded DataFrame here
-        self.filepath = None
+        # Drop down boxes
+        self.options = ["CV-analysis"]
+        self.clicked = StringVar()
+        self.clicked.set(self.options[0])
 
-        # Dropdown for future expansions
-        self.options = ["CV Analysis"]
-        self.clicked = StringVar(value=self.options[0])
+        # Make frame
+        self.frame = LabelFrame(master,text="Select analysis", height=5, width=5)
+        self.frame.grid(row=0,column=1)
+        #_____________________________
+        # Dropdown menu
+        #_____________________________
+        dropAnalys = OptionMenu(self.frame, self.clicked, *self.options)
+        dropAnalys.grid(row=0, column=1)
+        
+        self.clicked.trace("w",self.change) #track if something happens to variable
+        
+        #_____________________________
+        # Initial Entry boxes
+        #_____________________________
+        self.variable1 = self.entry_box('values_row_start',2,1,3)
+        self.variable2 = self.entry_box('potential_column',3,1,1)
+        self.variable3 = self.entry_box('current_column',4,1,3)
+        self.variable4 = self.entry_box('scan_column (0 if none)',5,1,5)
+        self.variable5 = self.entry_box('Scan_number',6,1,3)
+        self.variable6 = self.entry_box('LinReg_start_index',7,1,15)
+        self.variable7 = self.entry_box('R2_accept_value',8,1,0.90)
+        self.variable8 = self.entry_box('potential_unit',9,1,"V")
+        self.variable9 = self.entry_box('current_unit',10,1,"A")
+        self.variable10 = self.entry_box('Number of decimals',11,1,3)
+        
+        #_____________________________
+        # Info boxes
+        #_____________________________
+        self.button1 = Button(master, text = "info",command=self.info_box1).grid(row=2, column=2)
+        self.button2 = Button(master, text = "info", command=self.info_box2).grid(row=3, column=2)
+        self.button3 = Button(master, text = "info", command=self.info_box3).grid(row=4, column=2)
+        self.button4 = Button(master, text = "info", command=self.info_box4).grid(row=5, column=2)
+        self.button5 = Button(master, text = "info", command=self.info_box5).grid(row=6, column=2)
+        self.button6 = Button(master, text = "info", command=self.info_box6).grid(row=7, column=2)
+        self.button7 = Button(master, text = "info", command=self.info_box7).grid(row=8, column=2)
+        self.button8 = Button(master, text = "info", command=self.info_box8).grid(row=9, column=2)
+        self.button9 = Button(master, text = "info", command=self.info_box9).grid(row=10, column=2)
+        self.button10 = Button(master, text = "info", command=self.info_box10).grid(row=11, column=2)
 
-        frame = LabelFrame(master, text="Select Analysis")
-        frame.pack(padx=10, pady=10, fill="x")
-        OptionMenu(frame, self.clicked, *self.options).pack(fill="x")
+                
+        #_____________________________
+        # Run button
+        #_____________________________
+        self.run_button = Button(master,text="Run!",command = self.onclick)
+        self.run_button.grid(row=12,column=1)
+        
+    #_____________________________
+    # Info boxes - Text definitions
+    #_____________________________ 
+    def info_box1(self):
+        Text = "The row for which the First value appears in the excel/csv file."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box2(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Check your excel/csv file and list the column number of where the Potential (V) values appear."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box3(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Check your excel/csv file and list the column number of where the Current (I) values appear."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box4(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Check your excel/csv file and list the column number of where the Scan number indication appear."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box5(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "The Scan number you want to include for plotting."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box6(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "The number of indexes away from start and end value, in between regression is made."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box7(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Minimum value for how good linear reression must be in order to create mandatory baselines."
+        tk.messagebox.showinfo("Info",str(Text))        
 
-        Button(master, text="Import File", command=self.import_file).pack(pady=5)
-        self.file_label = Label(master, text="No file selected")
-        self.file_label.pack(pady=5)
+    def info_box8(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Type the Potential unit."
+        tk.messagebox.showinfo("Info",str(Text))  
+    
+    def info_box9(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Type the Current unit."
+        tk.messagebox.showinfo("Info",str(Text))  
+    
+    def info_box10(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Number of decimals to be displayed in output plots."
+        tk.messagebox.showinfo("Info",str(Text))  
+    #_____________________________
+    # Entry boxes
+    #_____________________________
+    def entry_box(self,Text, row, column, default_input, width = 20):
+        Text = str(Text)
+        Label(self.master, text=str(Text),width = width).grid(row=row)
+        E = Entry(self.master)
+        E.insert(END,str(default_input))
+        E.grid(row=row, column=column)
+        return E
 
-        Button(master, text="Run Analysis", command=self.run_analysis).pack(pady=5)
+    def change(self, *args):
+        if self.clicked.get() == self.options[0]:
+            self.variable1 = self.entry_box('values_row_start',2,1,3)
+            self.variable2 = self.entry_box('potential_column',3,1,1)
+            self.variable3 = self.entry_box('current_column',4,1,3)
+            self.variable4 = self.entry_box('scan_column (0 if none)',5,1,5)
+            self.variable5 = self.entry_box('Scan_number',6,1,3)
+            self.variable6 = self.entry_box('LinReg_start_index',7,1,15)
+            self.variable7 = self.entry_box('R2_accept_value',8,1,0.90)
+            self.variable8 = self.entry_box('potential_unit',9,1,"V")
+            self.variable9 = self.entry_box('current_unit',10,1,"A")
+            self.variable10 = self.entry_box('Number of decimals',11,1,3)
+        else:
+            pass
 
-    def import_file(self):
-        """
-        Prompt user for a single CSV or Excel, load into self.df exactly once.
-        No headers are assumed. If your file has a header row, adjust as needed.
-        """
-        self.filepath = filedialog.askopenfilename(
-            filetypes=[("CSV files", "*.csv"), ("Excel files", "*.xlsx;*.xls")]
-        )
-        if not self.filepath:
-            return
+    #_____________________________
+    # Save input in entry boxes and function for run-command
+    #_____________________________
 
-        self.file_label.config(text=self.filepath)
+    def onclick(self,*args):
+        self.variable1_get = self.variable1.get()
+        self.variable2_get = self.variable2.get()
+        self.variable3_get = self.variable3.get()
+        self.variable4_get = self.variable4.get()
+        self.variable5_get = self.variable5.get()
+        self.variable6_get = self.variable6.get()
+        self.variable7_get = self.variable7.get()
+        self.variable8_get = self.variable8.get()
+        self.variable9_get = self.variable9.get()
+        self.variable10_get = self.variable10.get()
+        values = [int(self.variable1_get),int(self.variable2_get),int(self.variable3_get),str(self.variable4_get),str(self.variable5_get),
+                  str(self.variable6_get),str(self.variable7_get),str(self.variable8_get),str(self.variable9_get),str(self.variable10_get)]
+        
+        #option to close tkinter window
+        #self.close_window
 
-        # Attempt to load
-        try:
-            if self.filepath.lower().endswith(".csv"):
-                # If the file actually has a header row, remove 'header=None'
-                self.df = pd.read_csv(self.filepath, header=None)
-            else:
-                self.df = pd.read_excel(self.filepath, header=None)
-        except Exception as e:
-            messagebox.showerror("File Error", f"Could not read file: {e}")
-            self.df = None
+        if self.clicked.get() == self.options[0]:
+            Analysis_CV(values[0], values[1],values[2],values[3],values[4],values[5],values[6],values[7],values[8],values[9])         
+        else:
+            pass
+        
+    def close_window(self): 
+        self.master.destroy()
 
-    def run_analysis(self):
-        """
-        Called when user clicks 'Run Analysis':
-          1) Check if df is loaded
-          2) Auto-detect columns
-          3) Ask user for a folder to save all results
-          4) Call analysis
-        """
-        if self.df is None or self.df.empty:
-            messagebox.showwarning("No Data", "Please import a valid file first.")
-            return
+import os
+import sys
+import tkinter as tk
+from tkinter import Button, END, Label, LabelFrame, OptionMenu, StringVar, Toplevel, filedialog, messagebox
+from PIL import Image
+from matplotlib import pyplot as plt
+import numpy as np
 
-        # Step 1: Auto-detect columns
-        # We'll do a simple approach:
-        #  - If df has at least 2 columns: col0=Potential, col1=Current
-        #  - If df has ≥3 columns, we assume col2=Scan
-        #  - Otherwise, error
-        num_cols = self.df.shape[1]
-        if num_cols < 2:
-            messagebox.showerror("Column Error", "Data must have at least 2 columns.")
-            return
-
-        pot_col = 1  # 1-based index for Analysis_CV
-        cur_col = 2
-        scan_col= 0  # default = 0 means 'no scan column used'
-
-        if num_cols >= 3:
-            scan_col = 3  # 1-based index if we see there's a 3rd column
-
-        # Step 2: Ask user for a saving folder
-        saving_folder = filedialog.askdirectory(title="Select folder to save results")
-        if not saving_folder:
-            messagebox.showwarning("No Folder", "No folder selected, analysis canceled.")
-            return
-
-        # Step 3: Call the Analysis_CV function
-        try:
-            # We'll pass the loaded df, plus we tell it row_start=1 if there's no header
-            # or row_start=2 if we want to skip the first row, etc.
-            # Adjust as needed. For now, we'll do row_start=1 if your data starts on row 1.
-            Analysis_CV(
-                df=self.df,             # DataFrame you already read
-                values_row_start=2,     # skip the header row
-                potential_column=1,     # A
-                current_column=3,       # C
-                scan_column=5,          # E
-                scan_number=1,          # must be an actual scan number in col E
-                linreg_start_index=15,
-                r2_accept_value=0.90,
-                potential_unit="V",
-                current_unit="A",
-                num_decimals=3,
-                saving_folder="."
-            )
-
-            messagebox.showinfo("Success", "CV analysis completed successfully!")
-        except Exception as e:
-            messagebox.showerror("Analysis Error", f"An error occurred: {e}")
 
 class EISApp:
-    def __init__(self, master):
+    def __init__(self,master):
         self.master = master
-        master.title("EIS Analysis")
-        master.geometry("500x300")
+        master.title('EIS analysis')
+        master.geometry("500x400")
+        
+        # Drop down boxes
+        self.options = ["EIS-analysis"]
+        self.clicked = StringVar()
+        self.clicked.set(self.options[0])
+        
+        # Make frame
+        self.frame = LabelFrame(master,text="Select analysis", height=5, width=5)
+        self.frame.grid(row=0,column=1)
+        #_____________________________
+        # Dropdown menu
+        #_____________________________
+        dropAnalys = OptionMenu(self.frame, self.clicked, *self.options)
+        dropAnalys.grid(row=0, column=1)
+        
+        self.clicked.trace("w",self.change) #track if something happens to variable
+        
+        #_____________________________
+        # Initial Entry boxes
+        #_____________________________
+        self.variable1 = self.entry_box('values_row_start',2,1,2)
+        self.variable2 = self.entry_box('Z_R_column',3,1,3)
+        self.variable3 = self.entry_box('Z_Im_column',4,1,4)
+        self.variable4 = self.entry_box('Z_R_start',5,1,"")
+        self.variable5 = self.entry_box('Z_R_end',6,1,"")
+        self.variable6 = self.entry_box('Z_Im_start',7,1,"")
+        self.variable7 = self.entry_box('Z_Im_end',8,1,"")
+        self.variable8 = self.entry_box('impedance_unit',9,1,"Ω")
+        self.variable9 = self.entry_box('circle_point1_index',10,1,0)
+        self.variable10 = self.entry_box('circle_point2_index',11,1,0)
+        
+        #_____________________________
+        # Info boxes
+        #_____________________________
+        self.button1 = Button(master, text = "info",command=self.info_box1).grid(row=2, column=2)
+        self.button2 = Button(master, text = "info", command=self.info_box2).grid(row=3, column=2)
+        self.button3 = Button(master, text = "info", command=self.info_box3).grid(row=4, column=2)
+        self.button4 = Button(master, text = "info", command=self.info_box4).grid(row=5, column=2)
+        self.button5 = Button(master, text = "info", command=self.info_box5).grid(row=6, column=2)
+        self.button6 = Button(master, text = "info", command=self.info_box6).grid(row=7, column=2)
+        self.button7 = Button(master, text = "info", command=self.info_box7).grid(row=8, column=2)
+        self.button8 = Button(master, text = "info", command=self.info_box8).grid(row=9, column=2)
+        self.button9 = Button(master, text = "info", command=self.info_box9).grid(row=10, column=2)
+        self.button10 = Button(master, text = "info", command=self.info_box10).grid(row=11, column=2)
 
-        self.df = None
-        self.filepath = None
+                
+        #_____________________________
+        # Run button
+        #_____________________________
+        self.run_button = Button(master,text="Run!",command = self.onclick)
+        self.run_button.grid(row=12,column=1)
+        
+    #_____________________________
+    # Info boxes - Text definitions
+    #_____________________________ 
+    def info_box1(self):
+        Text = "The row for which the First value appears in the excel/csv file."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box2(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Check your excel/csv file and list the column number of where the Real part of impedance values appear."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box3(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Check your excel/csv file and list the column number of where the Imaginary part of impedance values appear."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box4(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Insert value for Start interval of Real part of impedance values. NB: both Z_R_start and Z_R_end must be inserted for the interval range to be created."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box5(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Insert value for End interval of Real part of impedance values. NB: both Z_R_start and Z_R_end must be inserted for the interval range to be created."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box6(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Insert value for Start interval of Imaginary part of impedance values. NB: both Z_Im_start and Z_Im_end must be inserted for the interval range to be created."
+        tk.messagebox.showinfo("Info",str(Text))
+    
+    def info_box7(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Insert value for End interval of Imaginary part of impedance values. NB: both Z_Im_start and Z_Im_end must be inserted for the interval range to be created."
+        tk.messagebox.showinfo("Info",str(Text))        
 
-        self.options = ["EIS Analysis"]
-        self.clicked = StringVar(value=self.options[0])
+    def info_box8(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Type the Impedance unit."
+        tk.messagebox.showinfo("Info",str(Text))  
+    
+    def info_box9(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Type the starting index number to be used in the semicircle fit."
+        tk.messagebox.showinfo("Info",str(Text))  
+    
+    def info_box10(self):
+        if self.clicked.get() == self.options[0]:
+            Text = "Type the number of indexes to the left of the semicircle end that defines the final interval of the semicircle fit."
+        tk.messagebox.showinfo("Info",str(Text))  
+    #_____________________________
+    # Entry boxes
+    #_____________________________
+    def entry_box(self,Text, row, column, default_input, width = 20):
+        Text = str(Text)
+        Label(self.master, text=str(Text),width = width).grid(row=row)
+        E = Entry(self.master)
+        E.insert(END,str(default_input))
+        E.grid(row=row, column=column) 
+        return E
 
-        frame = LabelFrame(master, text="Select Analysis")
-        frame.pack(padx=10, pady=10, fill="x")
-        OptionMenu(frame, self.clicked, *self.options).pack(fill="x")
+    def change(self, *args):
+        if self.clicked.get() == self.options[0]:
+            self.variable1 = self.entry_box('values_row_start',2,1,2)
+            self.variable2 = self.entry_box('Z_R_column',3,1,3)
+            self.variable3 = self.entry_box('Z_Im_column',4,1,4)
+            self.variable4 = self.entry_box('Z_R_start',5,1,"")
+            self.variable5 = self.entry_box('Z_R_end',6,1,"")
+            self.variable6 = self.entry_box('Z_Im_start',7,1,"")
+            self.variable7 = self.entry_box('Z_Im_end',8,1,"")
+            self.variable8 = self.entry_box('impedance_unit',9,1,"Ω")
+            self.variable9 = self.entry_box('circle_point1_index',10,1,0)
+            self.variable10 = self.entry_box('circle_point2_index',11,1,0)
 
-        Button(master, text="Import File", command=self.import_file).pack(pady=5)
-        self.file_label = Label(master, text="No file selected")
-        self.file_label.pack(pady=5)
+        else:
+            pass
 
-        Button(master, text="Run Analysis", command=self.run_analysis).pack(pady=5)
+    #_____________________________
+    # Save input in entry boxes and function for run-command
+    #_____________________________
+    
+    def onclick(self,*args): 
+        self.variable1_get = self.variable1.get()
+        self.variable2_get = self.variable2.get()
+        self.variable3_get = self.variable3.get()
+        self.variable4_get = self.variable4.get()
+        self.variable5_get = self.variable5.get()
+        self.variable6_get = self.variable6.get()
+        self.variable7_get = self.variable7.get()
+        self.variable8_get = self.variable8.get()
+        self.variable9_get = self.variable9.get()
+        self.variable10_get = self.variable10.get()
+        values = [int(self.variable1_get),int(self.variable2_get),int(self.variable3_get),str(self.variable4_get),str(self.variable5_get),
+                  str(self.variable6_get),str(self.variable7_get),str(self.variable8_get),str(self.variable9_get),str(self.variable10_get)]
+        
+        #option to close tkinter window
+        #self.close_window
 
-    def import_file(self):
-        """
-        User picks a single CSV or Excel. We assume the first row has headers,
-        so we do header=0. If your data uses commas as decimals, add decimal=','.
-        """
-        self.filepath = filedialog.askopenfilename(
-            filetypes=[("CSV files", "*.csv"), ("Excel files", "*.xlsx;*.xls")]
-        )
-        if not self.filepath:
-            return
+        if self.clicked.get() == self.options[0]:
+            Analysis_EIS(values[0], values[1],values[2],values[3],values[4],values[5],values[6],values[7],values[8],values[9])          
+        else:
+            pass
 
-        self.file_label.config(text=self.filepath)
-        try:
-            if self.filepath.lower().endswith(".csv"):
-                # If your decimals are normal dots, no change needed.
-                # If your decimals are commas, you might do: decimal=','
-                self.df = pd.read_csv(self.filepath, header=0)
-            else:
-                self.df = pd.read_excel(self.filepath, header=0)
-        except Exception as e:
-            messagebox.showerror("File Error", f"Could not read file: {e}")
-            self.df = None
-
-    def run_analysis(self):
-        if self.df is None or self.df.empty:
-            messagebox.showwarning("No Data", "Please import a valid file first.")
-            return
-
-        selected_option = self.clicked.get()
-        if selected_option == "EIS Analysis":
-            try:
-                saving_folder = filedialog.askdirectory(title="Select folder to save EIS results")
-                if not saving_folder:
-                    messagebox.showwarning("No folder", "Analysis canceled.")
-                    return
-
-                # Suppose from your data screenshot:
-                #   Column A: Index
-                #   Column B: Frequency
-                #   Column C: Z' (Ω)
-                #   Column D: -Z'' (Ω)
-                #   ...
-                # That means: real_col=3, imag_col=4 (1-based indices).
-                # If your actual data starts on row 2 (since row 1 was headers),
-                # often you do values_row_start=1 or 2 depending on how you want to skip rows.
-                # Try values_row_start=1 if your data is now row 0-based after header=0.
-
-                result = Analysis_EIS(
-                    df=self.df,
-                    values_row_start=1,   # Don't skip any additional lines now that header=0
-                    real_col=3,           # If Z' is the 3rd column in 1-based indexing
-                    imag_col=4,           # If -Z'' is the 4th column
-                    x_start=None,
-                    x_end=None,
-                    y_start=None,
-                    y_end=None,
-                    unit="Ω",
-                    circle_pt1_index=0,
-                    circle_pt2_index=0,
-                    saving_folder=saving_folder
-                )
-                messagebox.showinfo("Success", f"EIS analysis done. Plot at {result['plot_path']}")
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
 
 class Custom_Plot_App:
     def __init__(self,master):
@@ -393,6 +527,20 @@ class Custom_Plot_App:
     def close_window(self): 
         self.master.destroy()
 
+import os
+import csv
+import tempfile
+import numpy as np
+from scipy.signal import find_peaks
+import matplotlib.pyplot as plt
+from collections import defaultdict
+from tkinter import filedialog, messagebox, Toplevel, StringVar, Label, LabelFrame, Button, OptionMenu
+from scipy import sparse
+from scipy.sparse.linalg import spsolve
+from scipy.stats import linregress
+
+
+
 class DPVApp:
     def __init__(self, master, main_window):
         self.master = master
@@ -435,16 +583,6 @@ class DPVApp:
 
         self.clicked.trace("w", self.change)  # track if something happens to variable
         
-        # ------------------------
-        # Add Metadata Fields Entry:
-        # ------------------------
-        self.metadata_fields_label = Label(self.main_frame, text="Metadata Fields (comma separated):")
-        self.metadata_fields_label.pack(padx=10, pady=5)
-        self.metadata_fields_entry = Entry(self.main_frame)
-        # Set a default string that represents the default field names
-        self.metadata_fields_entry.insert(END, "Electrode,Analytes,Concentration,Method")
-        self.metadata_fields_entry.pack(padx=10, pady=5)
-
         #-------------------------
         # Import file(s)
         #-------------------------
@@ -516,226 +654,24 @@ class DPVApp:
         self.save_as_button = Button(self.main_frame, text="Save Results", command=self.save_results, state=tk.DISABLED)
         self.save_as_button.pack(pady=10)
 
-
-    # ---------------------------------------------------------
-    # helper: show what goes into Analysis_DPV
-    # ---------------------------------------------------------
-    def _debug_dump(self, csv_path: str, n_lines: int = 12) -> None:
-        print("\n=== DEBUG — first lines of temp CSV ===")
-        with open(csv_path, "r", encoding="utf-16") as f:
-            for i in range(n_lines):
-                try:
-                    print(f"{i:2}: {next(f).rstrip()}")
-                except StopIteration:
-                    break
-        print("=== end preview =====================================\n")
-
-    # ---------------------------------------------------------
-    # robust .pssession loader  (works for your 1. S0_Donor Q file)
-    # ---------------------------------------------------------
-    def load_pssession(self, path: str) -> tuple[pd.DataFrame, int]:
-        """
-        Return (dataframe, n_replicates).
-
-        The dataframe columns are:
-            Potential (V)           – replicate 1
-            Current (µA)            – replicate 1
-            Potential (V)_2         – replicate 2
-            Current (µA)_2          – replicate 2
-            …
-        """
-        import json
-
-        # ---------- read & isolate JSON header ----------------
-        with open(path, "r", encoding="utf-16") as f:
-            txt = f.read()
-
-        start = txt.find("{")
-        depth = 0
-        for i, ch in enumerate(txt[start:], start):
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    end = i
-                    break
-        sess = json.loads(txt[start : end + 1])
-
-        # ---------- gather *all* DPV curves -------------------
-        curves = []
-        for m in sess["Measurements"]:
-            if "METHOD_ID=DPV" not in m.get("Method", "").upper():
-                continue
-            curves.extend(m.get("Curves", []))
-
-        if not curves:
-            raise ValueError("No DPV curves in session")
-
-        columns = {}
-        for idx, curve in enumerate(curves, start=1):
-            # Try RawDataArray first --------------------------
-            raw = curve.get("RawDataArray") or {}
-            X = raw.get("Potential") or raw.get("X")
-            Y = raw.get("Current")   or raw.get("Y")
-
-            # Fallback: XAxisDataArray / YAxisDataArray -------
-            if X is None or Y is None:
-                xb = curve.get("XAxisDataArray") or {}
-                yb = curve.get("YAxisDataArray") or {}
-                X = xb.get("DataValues")
-                Y = yb.get("DataValues")
-                if X and isinstance(X[0], dict):
-                    X = [float(d["V"]) for d in X]
-                    Y = [float(d["V"]) for d in Y]
-
-            if X is None or Y is None or len(X) != len(Y):
-                raise ValueError(f"Curve #{idx} has inconsistent arrays")
-
-            # Column names: first pair has no suffix, the rest “_2”, “_3”…
-            suf = "" if idx == 1 else f"_{idx}"
-            columns[f"Potential (V){suf}"] = X
-            columns[f"Current (µA){suf}"]  = Y
-
-        df = pd.DataFrame(columns)
-        print(f"→ Loaded {len(curves)} curve(s), {len(df)} points each")
-        return df, len(curves)
-    
     def import_file(self):
-
-        """
-        Import a data file (CSV, Excel, or PalmSens session) and integrate metadata extraction for DPV measurements.
-        """
-        # Prompt user for file selection (CSV, Excel, or .pssession)
         self.filepath = filedialog.askopenfilename(
-            filetypes=[
-                ("All files", "*.*"),
-                ("PalmSens session", "*.pssession"),
-                ("CSV files", "*.csv"),
-                ("Excel files", "*.xlsx;*.xls"),
-            ]
+            filetypes=[("CSV files", "*.csv"), ("Excel files", "*.xlsx;*.xls")]
         )
-        if not self.filepath:
-            # No file selected, exit early
+        if self.filepath:
+            self.file_path_label.config(text=self.filepath)
+
+            # Automatically run Analysis_DPV and store its result
+            self.analysis_results = Analysis_DPV(self.filepath)
+            if not self.analysis_results:
+                messagebox.showwarning("Load Failure", "Could not analyze the selected file.")
+            else:
+                # Optionally, enable the Save Results button now
+                self.save_as_button.config(state=tk.NORMAL)
+
+        else:
             self.file_path_label.config(text="No file selected")
-            self.analysis_results = None
-            return
-
-        # Update the GUI label to show the selected file path
-        self.file_path_label.config(text=self.filepath)
-
-        # 1) figure out which metadata fields to extract
-        custom_fields = [
-            f.strip() for f in 
-            self.metadata_fields_entry.get().split(',')
-            if f.strip()
-        ]
-        if not custom_fields:
-            custom_fields = ["Electrode","Analytes","Concentration","Method"]
-
-        ext = os.path.splitext(self.filepath)[1].lower()
-        if ext == '.pssession':
-            try:
-                # --- load the DPV curve itself ---
-                df, n_reps = self.load_pssession(self.filepath)
-
-                # --- grab the Title from the JSON for metadata ---
-                with open(self.filepath, 'r', encoding='utf-16') as f:
-                    txt = f.read()
-                start = txt.find('{'); brace = 0; end = None
-                for i,ch in enumerate(txt[start:], start):
-                    if   ch=='{': brace += 1
-                    elif ch=='}': brace -= 1
-                    if brace==0:
-                        end = i
-                        break
-                sess    = json.loads(txt[start:end+1])
-                dpv_meas= next(m for m in sess["Measurements"]
-                              if "METHOD_ID=DPV" in m.get("Method","").upper())
-                raw_title = dpv_meas.get("Title","").strip()
-                print("DEBUG raw Title:", raw_title)
-
-                # --- strip the leading "1. ", then cut off at "_DPV" ---
-                body     = raw_title.split('. ',1)[-1]
-                name_only= body.split('_DPV',1)[0]
-
-                # --- split into exactly (N-1) pieces, N = len(custom_fields) ---
-                n_meta   = len(custom_fields)
-                parts    = name_only.split('_', n_meta-1)
-
-                # --- pad to (N-1) tokens if needed ---
-                while len(parts) < n_meta-1:
-                    parts.append("")
-
-                # --- finally tack on "DPV" as the Method field ---
-                parts.append("DPV")
-
-                # --- join back to one Metadata row entry ---
-
-                #meta_entry = "_".join(parts)
-                meta_entry_single = "_".join(parts)
-                meta_entry = ",,".join([meta_entry_single] * n_reps)
-                print("DEBUG meta_entry:", meta_entry)
-
-                
-                with tempfile.NamedTemporaryFile(
-                        suffix='.csv', delete=False,
-                        mode='w', encoding='utf-16', newline=''
-                ) as tmp:
-                    tmp.write("\n"*3)                   # 0-3: blank lines
-                    tmp.write(f"Metadata row: {meta_entry}\n")   # 4: metadata
-                    tmp.write("Date and time measurement: \n") 
-                    df.to_csv(tmp, index=False, header=True)      # 5-…: header + data
-                    tmp_path = tmp.name
-
-                # --- write out tiny UTF-16 CSV with 3 blank lines + that metadata row ---
-                #tmp = tempfile.NamedTemporaryFile(
-                #    suffix='.csv', delete=False,
-                #    mode='w', encoding='utf-16', newline=''
-                #)
-                #tmp.write("\n"*4)
-                #tmp.write(f"Metadata row: {meta_entry}\n")
-                #df.to_csv(tmp.name, index=False, header=True, encoding='utf-16')
-                #tmp_path = tmp.name
-                #tmp.close()
-
-                # (optional) quick preview
-                print("=== Temp CSV Preview ===")
-                with open(tmp_path, 'r', encoding='utf-16') as dbg:
-                    for _ in range(5):
-                        line = dbg.readline()
-                        if not line: break
-                        print(line.strip())
-                print("=== End Preview ===")
-
-                file_to_pass = tmp_path
-
-            except Exception as e:
-                messagebox.showerror(
-                    "Load Error",
-                    f"Couldn’t parse session file:\n{e}"
-                )
-                self._debug_dump(file_to_pass)
-
-                self.analysis_results = None
-                return
-
-        else:
-            file_to_pass = self.filepath
-
-        # 2) hand it off to your unchanged DPV loader
-        self.analysis_results = Analysis_DPV(
-            file_to_pass,
-            metadata_fields=custom_fields
-        )
-        if not self.analysis_results:
-            messagebox.showwarning(
-                "Load Failure",
-                "Could not analyze the selected file.\n"
-                "Please check the file format and metadata."
-            )
-        else:
-            self.save_as_button.config(state=tk.NORMAL)
+            self.analysis_results = None  # Clear out old results if user canceled
 
 
     def import_blank_file(self):
@@ -1117,6 +1053,8 @@ class DPVApp:
             for var in self.plot_vars:
                 var.set(0)
 
+
+
     def plot_selected(self, analysis_option):
         selected_indices = [i * 2 for i, var in enumerate(self.plot_vars) if var.get()]
         print(f"Selected plots for {analysis_option}: {selected_indices}")
@@ -1410,6 +1348,11 @@ class DPVApp:
             plot_filenames.append(filename)
 
         return plot_filenames
+
+
+    
+
+
 
 
 #_____________________________

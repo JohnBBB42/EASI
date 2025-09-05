@@ -27,136 +27,126 @@ class CustomValueError(Exception):
     def __init__(self, message="An invalid value was provided."):
         super().__init__(message)
 
-def Analysis_DPV(file_path, blank_responses=None, metadata_fields=None):
+def Analysis_DPV(file_path, blank_responses=None, metadata_fields=None, peak_regions=None):
     #_________________________________________
     # DEFINE FUNCTIONS
     #_________________________________________
 
-    #---------------------------
-    # Flexible metadata loading function
-    #---------------------------
-    def load_data_and_metadata(file_path, metadata_fields=None, encoding='utf-16', metadata_header_index=3, metadata_delimiter=",,"):
+    # ─────────────────────────────────────────────────────────────────────────────
+    # FLEXIBLE CSV / .pssession LOADER  (keeps dots *and* commas in concentrations)
+    # ─────────────────────────────────────────────────────────────────────────────
+    def load_data_and_metadata(
+            file_path,
+            metadata_fields=None,             # what the user typed in the GUI
+            *,                                # keyword‑only from here down
+            encoding          ="utf‑16",
+            metadata_row_idx  =3,
+            metadata_delim    =",,",
+    ):
         """
-        Load the file, extract and validate metadata using a flexible naming scheme,
-        and load the accompanying numerical data.
+        Return
+            headers        – the column header row
+            data_array     – numpy array with all numeric data
+            parsed_metadata – list[dict] 1‑per‑curve
 
-        Parameters:
-            file_path (str): Path to the file.
-            metadata_fields (list, optional): Expected metadata field names.
-                Default is ["Electrode", "Analytes", "Concentration", "Method"].
-            encoding (str): File encoding. Default 'utf-16'.
-            metadata_header_index (int): Row index for the metadata header (default is 3, i.e. the fourth line).
-            metadata_delimiter (str): Delimiter between metadata entries (default is ",,").
-
-        Returns:
-            tuple: (headers, data_array, parsed_metadata) on success; (None, None, None) if errors occur.
+        • Concentrations such as “29.60µM*”, “29,50uM”, “50mM” are preserved
+        verbatim (commas are converted to dots later by numeric_conc()).
+        • Works for any ordering of the four tokens.
         """
-        if metadata_fields is None:
-            metadata_fields = ["Electrode", "Analytes", "Concentration", "Method"]
+        import csv, re, numpy as np
+        from collections import defaultdict
 
-        # ---------------------------
-        # Helper functions (unchanged except for flexibility)
-        # ---------------------------
-        def read_file_lines(fp, encoding=encoding):
-            with open(fp, 'r', encoding=encoding) as file:
-                return file.readlines()
+        # ------------------------------------------------------------------ helpers
+        unit_pat  = r"(?:nM|uM|µM|mM|M|(?:g|mg|µg)\/?L)"
+        conc_rx   = re.compile(rf"(\d+(?:[.,]\d+)?)\s*{unit_pat}\*?", re.I)
+        analy_rx  = re.compile(r"^(HX|UA|XAN|AA|DA)$", re.I)   # extend at will
+        method_rx = re.compile(r"DPV", re.I)
 
-        def extract_metadata_row(lines, index=metadata_header_index, delimiter=metadata_delimiter):
-            metadata_row = lines[index].strip()
-            metadata_row = re.sub(r'^Metadata row: ', '', metadata_row)
-            metadata_entries = [entry.strip() for entry in metadata_row.split(delimiter) if entry.strip()]
-            cleaned_entries = []
-            missing_parts = []
-            for entry in metadata_entries:
-                entry = entry.strip()
-                if 'DPV' in entry:
-                    entry = entry.split('DPV')[0] + 'DPV'
-                else:
-                    missing_parts.append("Method")
-                cleaned_entries.append(entry)
-            return cleaned_entries, missing_parts
+        def classify(tok: str):
+            """return ('Concentration', cleaned) | ('Analytes', cleaned) | … | None"""
+            if conc_rx.fullmatch(tok):
+                return "Concentration", tok.replace(",", ".")      # keep dot‑decimal
+            if analy_rx.match(tok):
+                return "Analytes", tok.upper()
+            if method_rx.search(tok):
+                return "Method", "DPV"
+            return None, None
 
-        def validate_metadata_entry(entry, entry_number, missing_parts):
-            # (Exactly as in your original code)
-            entry_to_validate = re.sub(r'PP_', '', entry)
-            parts_to_validate = entry_to_validate.split('_')
-            if len(parts_to_validate) > 0:
-                if '-' in parts_to_validate[0]:
-                    missing_parts.append("Electrode")
-            if len(parts_to_validate) > 1:
-                if '-' not in parts_to_validate[1]:
-                    if any(char.isdigit() for char in parts_to_validate[1]):
-                        missing_parts.append("Analytes")
-                    else:
-                        missing_parts.append("Concentration")
-            if len(parts_to_validate) > 2:
-                if 'DPV' not in entry:
-                    missing_parts.append("Method")
-            if missing_parts:
-                raise CustomValueError(f"Error in Entry #{entry_number}: Entry is missing required components: {', '.join(missing_parts)}. Expected format: {'_'.join(metadata_fields)}.")
-
-        def clean_metadata_entry(entry):
-            # Exactly as in your original code
-            entry = re.sub(r'PP_', '', entry)
-            entry = entry.replace('-', '_')
-            parts = entry.split('_')
-            # Here, we use only as many parts as defined by metadata_fields
-            entry = '_'.join(parts[:len(metadata_fields)])
-            return entry
-
-        def parse_metadata_entry(entry):
-            parts = entry.split('_')
-            # Assume len(parts) is >= len(metadata_fields)
-            return {field: part for field, part in zip(metadata_fields, parts)}
-
-        def load_and_clean_data(fp, encoding=encoding, header_index=4, metadata_identifiers=['Date and time measurement:']):
-            with open(fp, 'r', encoding=encoding) as file:
-                reader = csv.reader(file)
-                data = list(reader)[header_index + 1:]
-            headers = data[0]
-            data_cleaned = [row for row in data if not any(identifier in row[0] for identifier in metadata_identifiers)]
-            valid_data = [row for row in data_cleaned[1:] if len(row) == len(headers)]
-            return headers, valid_data
-
-        def safe_float_convert(value):
+        def safe_float(x):
             try:
-                return float(value)
+                return float(x.replace(",", "."))  # accept both 0,5 and 0.5
             except ValueError:
                 return np.nan
 
-        def convert_data_to_array(data_rows):
-            return np.array([[safe_float_convert(cell) for cell in row] for row in data_rows])
-        
-        # --- Execute the metadata and data loading ---
-        lines = read_file_lines(file_path)
+        # ------------------------------------------------- 0) pull the tiny CSV part
+        with open(file_path, "r", encoding=encoding, newline="") as fh:
+            lines = fh.readlines()
 
-        metadata_entries, missing_parts = extract_metadata_row(lines)
-        # Make a second call to get a separate copy for validation:
-        metadata_entries_val, missing_parts = extract_metadata_row(lines)
-        
-        error_occurred = False
-        try:
-            for entry_number, entry in enumerate(metadata_entries_val, start=1):
-                validate_metadata_entry(entry, entry_number, missing_parts)
-        except CustomValueError as e:
-            print(e)
-            error_occurred = True
+        meta_raw = lines[metadata_row_idx].strip()
+        meta_raw = re.sub(r"^Metadata row:\s*", "", meta_raw)
+        raw_entries = [e.strip() for e in meta_raw.split(metadata_delim) if e.strip()]
 
-        if not error_occurred:
-            # Clean each metadata entry and then parse it
-            cleaned_metadata_entries = [clean_metadata_entry(entry) for entry in metadata_entries]
-            parsed_metadata = [parse_metadata_entry(entry) for entry in cleaned_metadata_entries]
-        else:
-            print("Stopping due to validation error. No further processing will be performed, check your dataset.")
-            return None, None, None
+        if not metadata_fields:
+            metadata_fields = ["Electrode", "Analytes", "Concentration", "Method"]
 
-        headers, valid_data = load_and_clean_data(file_path)
-        data_array = convert_data_to_array(valid_data)
-        return headers, data_array, parsed_metadata
+        # ------------------------------------------------- 1) build the token table
+        parsed = []                                                  # list[dict]
+        for entry in raw_entries:
+            tokens = re.split(r"[._\-\s]+", entry)
+            rec    = defaultdict(str)
+            if tokens:
+                rec["Electrode"] = tokens[0]                         # always first
 
-    def find_peaks_and_process_data(headers, data_array, parsed_metadata):
-        voltage_columns = [i for i, col in enumerate(headers) if 'V' in col]
-        current_columns = [i for i, col in enumerate(headers) if 'µA' in col]
+            for tok in tokens[1:]:
+                k, v = classify(tok)
+                if k and not rec[k]:
+                    rec[k] = v
+
+            rec.setdefault("Method", "DPV")                          # safety net
+            parsed.append({f: rec.get(f, "") for f in metadata_fields})
+
+        # ------------------------------------------------- 2) numeric data section
+        with open(file_path, "r", encoding=encoding, newline="") as fh:
+            sample = fh.read(2048)
+            fh.seek(0)
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=[",", ";", "\t"])
+            except csv.Error:
+                dialect          = csv.excel()
+                dialect.delimiter = ","
+
+            rows = list(csv.reader(fh, dialect))
+
+        hdr_row   = metadata_row_idx + 2                # blank + “Date …” rows
+        headers   = rows[hdr_row]
+        data_rows = rows[hdr_row + 1:]
+
+        data_array = np.array([
+            [safe_float(c) for c in row]
+            for row in data_rows
+            if len(row) == len(headers)
+        ])
+
+        return headers, data_array, parsed
+
+
+
+    def find_peaks_and_process_data(headers, data_array, parsed_metadata, peak_regions=None):
+        #voltage_columns = [i for i, col in enumerate(headers) if 'V' in col]
+        #current_columns = [i for i, col in enumerate(headers) if 'µA' in col]
+
+        voltage_columns = [i for i,col in enumerate(headers) if col.upper().startswith("V")]
+        current_columns = [i for i,col in enumerate(headers) if "µA" in col]
+
+        # ─── SAFETY NET (do not crash if counts mismatch) ────────────────────
+        orig_meta_len = len(parsed_metadata)
+        n_pairs = min(len(voltage_columns), len(current_columns), orig_meta_len)
+        voltage_columns = voltage_columns[:n_pairs]
+        current_columns = current_columns[:n_pairs]
+        parsed_metadata = parsed_metadata[:n_pairs]
+        if n_pairs < orig_meta_len:
+            print(f"⚠️  Truncated metadata[{orig_meta_len}] → [{n_pairs}] column-pairs")
+        # ────────────────────────────────────────────────────────────────────
 
         def baseline_als(y, lam=1e5, p=0.01, niter=10):
             L = len(y)
@@ -182,45 +172,123 @@ def Analysis_DPV(file_path, blank_responses=None, metadata_fields=None):
             peaks, _ = find_peaks(smoothed_current, prominence=0.1)
             return peaks, smoothed_current
 
-        results = []
-        for index, row in enumerate(parsed_metadata):
-            # If the lengths do not match, print a warning and return
-            if len(parsed_metadata) > len(voltage_columns) or len(parsed_metadata) > len(current_columns):
-                raise ValueError("Mismatch between parsed metadata entries and available columns. Please check your dataset.")
+        # ----------------------------------------------------------------------
+        # (A) helper : FWHM on *any* 1-D signal (baseline already removed)
+        # ------------------------------------------------------------------
+        def fwhm(x, y, peak_idx):
+            """
+            Return FWHM in x-units for the peak at peak_idx.
+            y should already be baseline-corrected (so half-max = ½·y[p]).
+            Uses linear interpolation between the two samples that straddle
+            the half-height on each side.
+            """
+            half = 0.5 * y[peak_idx]
 
+            # --- left side -------------------------------------------------
+            i_left = peak_idx
+            while i_left > 0 and y[i_left] > half:
+                i_left -= 1
+            if i_left == 0:
+                return np.nan                  # clipped at start
+            # linear interpolate between (i_left, i_left+1)
+            x_left = np.interp(
+                half,
+                [y[i_left], y[i_left+1]],
+                [x[i_left], x[i_left+1]]
+            )
+
+            # --- right side ------------------------------------------------
+            i_right = peak_idx
+            while i_right < len(y)-1 and y[i_right] > half:
+                i_right += 1
+            if i_right == len(y)-1:
+                return np.nan                  # clipped at end
+            x_right = np.interp(
+                half,
+                [y[i_right-1], y[i_right]],
+                [x[i_right-1], x[i_right]]
+            )
+
+            return abs(x_right - x_left)
+        # ---------- end helper --------------------------------------------
+
+        results = []
+        # ------------------------------------------------------------------
+        # iterate one voltammogram / metadata entry at a time
+        # ------------------------------------------------------------------
+        for index, row in enumerate(parsed_metadata):
+
+            # --- 1. grab X/Y arrays -------------------------------------------------
             voltage_data = data_array[:, voltage_columns[index]]
             current_data = data_array[:, current_columns[index]]
 
-            # Remove rows with NaN values
-            valid_idx = ~np.isnan(voltage_data) & ~np.isnan(current_data)
-            voltage_data = voltage_data[valid_idx]
-            current_data = current_data[valid_idx]
+            # drop NaNs
+            keep = ~np.isnan(voltage_data) & ~np.isnan(current_data)
+            voltage_data = voltage_data[keep]
+            current_data = current_data[keep]
 
+            # --- 2. peak finding & baseline corr. -----------------------------------
             peaks, smoothed_current = find_peaks_in_data(voltage_data, current_data)
 
-            # Apply ALS baseline correction
-            baseline = baseline_als(smoothed_current)
+            baseline         = baseline_als(smoothed_current)
             adjusted_current = smoothed_current - baseline
 
+            # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+            # KEEP A COPY **before** any window-mask so FWHM has full data
+            orig_V    = voltage_data.copy()
+            orig_adj  = adjusted_current.copy()
+            # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+            # ------------------------------------------------------------------
+            # apply user-defined peak window(s) if provided
+            # ------------------------------------------------------------------
+            my_windows = None
+            if peak_regions:
+                for key, win in peak_regions.items():        # let "UA" match "HX,Xan,UA"
+                    if key.lower() in row["Analytes"].lower():
+                        my_windows = win
+                        break
+
+            if my_windows:
+                peaks = np.array([
+                    p for p in peaks
+                    if any(lo <= orig_V[p] <= hi for lo, hi in my_windows)
+                ])
+
+            # ------------------------------------------------------------------
+            # write out results  (including NEW FWHM column)
+            # ------------------------------------------------------------------
             for peak_idx in peaks:
-                peak_voltage = voltage_data[peak_idx]
-                peak_current = current_data[peak_idx]
-                adjusted_peak_current = adjusted_current[peak_idx]
-                y_offset = peak_current - adjusted_peak_current
+                peak_voltage         = float(orig_V[peak_idx])
+                peak_current         = float(current_data[peak_idx])
+                adj_peak_current     = float(orig_adj[peak_idx])
+
+                # ---- NEW: FWHM computed on full (uncropped) trace --------------
+                this_fwhm = fwhm(orig_V, orig_adj, peak_idx)
+
+                # ───────── DEBUG HELP ───────────────────────────────────────────
+                if "UA" in row["Analytes"]:
+                    if np.isnan(this_fwhm):
+                        print(f"[DEBUG-UA]  peak@{peak_voltage:.3f} V   FWHM = NaN  "
+                            f"(left or right half-height was clipped)")
+                    else:
+                        print(f"[DEBUG-UA]  peak@{peak_voltage:.3f} V   FWHM = {this_fwhm:.4f} V")
+                # ────────────────────────────────────────────────────────────────
 
                 results.append({
-                    'Entry': index,
-                    'Electrode': row['Electrode'],
-                    'Analytes': row['Analytes'],
-                    'Method': row['Method'],
-                    'Concentration': row['Concentration'],
-                    'Peak Voltage': peak_voltage,
-                    'Peak Current': peak_current,
-                    'Adjusted Peak Current': adjusted_peak_current,
-                    'Y Offset': y_offset,
-                    'Baseline at Peak': baseline[peak_idx]
+                    'Entry'                : index,
+                    'Electrode'            : row['Electrode'],
+                    'Analytes'             : row['Analytes'],
+                    'Method'               : row['Method'],
+                    'Concentration'        : row['Concentration'],
+                    'Peak Voltage'         : peak_voltage,
+                    'Peak Current'         : peak_current,
+                    'Adjusted Peak Current': adj_peak_current,
+                    'Y Offset'             : peak_current - adj_peak_current,
+                    'Baseline at Peak'     : float(baseline[peak_idx]),
+                    'FWHM'                 : this_fwhm,        # ← new column
                 })
-
+        # ----------------------------------------------------------------------
         return results
 
     def calculate_cov_peak_currents(results):
@@ -346,55 +414,74 @@ def Analysis_DPV(file_path, blank_responses=None, metadata_fields=None):
         return lod_results
 
     def perform_t_tests(mean_peak_currents, std_peak_currents, sample_size=None):
+        # 1) Build analyte → { concentration_value : { 'mean':…, 'std':… } }
         analytes_dict = defaultdict(lambda: defaultdict(dict))
-        for key, mean_peak_current in mean_peak_currents.items():
-            concentration, analytes = key
-            analyte_list = analytes.split(',')
-            for i, analyte in enumerate(analyte_list):
-                analyte_name = analyte.strip()
-                if len(analyte_list) > 1:
-                    analyte_name = '3' + analyte_name
-                analytes_dict[analyte_name][float(concentration[:-2])]['mean'] = mean_peak_current[i]
-        
-        for key, std_peak_current in std_peak_currents.items():
-            concentration, analytes = key
-            analyte_list = analytes.split(',')
-            for i, analyte in enumerate(analyte_list):
-                analyte_name = analyte.strip()
-                if len(analyte_list) > 1:
-                    analyte_name = '3' + analyte_name
-                analytes_dict[analyte_name][float(concentration[:-2])]['std'] = std_peak_current[i]
-        
+        number_re     = re.compile(r"([0-9]*\.?[0-9]+)")
+
+        # populate 'mean'
+        for (conc_str, analytes), means in mean_peak_currents.items():
+            m = number_re.match(conc_str)
+            if not m:
+                continue                        # skip empty or non-numeric
+            conc = float(m.group(1))
+            for i, analyte in enumerate(analytes.split(',')):
+                if i >= len(means):
+                    break
+                name = analyte.strip()
+                # if there were multi-analyte entries you prefixed them with '3'
+                if ',' in analytes:
+                    name = '3' + name
+                analytes_dict[name][conc]['mean'] = means[i]
+
+        # populate 'std'
+        for (conc_str, analytes), stds in std_peak_currents.items():
+            m = number_re.match(conc_str)
+            if not m:
+                continue
+            conc = float(m.group(1))
+            for i, analyte in enumerate(analytes.split(',')):
+                if i >= len(stds):
+                    break
+                name = analyte.strip()
+                if ',' in analytes:
+                    name = '3' + name
+                analytes_dict[name][conc]['std'] = stds[i]
+
+        # 2) Now do pairwise t-tests
         t_test_results = []
         for analyte, conc_dict in analytes_dict.items():
+            # need at least two concentrations to compare
             concentrations = sorted(conc_dict.keys())
-            for (concentration1, concentration2) in combinations(concentrations, 2):
-                mean1 = conc_dict[concentration1]['mean']
-                mean2 = conc_dict[concentration2]['mean']
-                std1 = conc_dict[concentration1]['std']
-                std2 = conc_dict[concentration2]['std']
-                n1 = n2 = sample_size if sample_size is not None else 3
-                
-                pooled_std = np.sqrt(((n1 - 1) * std1**2 + (n2 - 1) * std2**2) / (n1 + n2 - 2))
-                if pooled_std == 0:
-                    t_stat = 0
-                else:
-                    t_stat = (mean1 - mean2) / (pooled_std * np.sqrt(1/n1 + 1/n2))
-                
+            if len(concentrations) < 2:
+                continue
+
+            n1 = n2 = sample_size or 3
+            for c1, c2 in combinations(concentrations, 2):
+                mean1 = conc_dict[c1].get('mean', 0)
+                mean2 = conc_dict[c2].get('mean', 0)
+                std1  = conc_dict[c1].get('std',  0)
+                std2  = conc_dict[c2].get('std',  0)
+
+                # pooled standard deviation
+                pooled = np.sqrt(((n1 - 1)*std1**2 + (n2 - 1)*std2**2) / (n1 + n2 - 2)) \
+                        if (n1 + n2 - 2) > 0 else 0
+
+                t_stat = 0.0
+                if pooled > 0:
+                    t_stat = (mean1 - mean2) / (pooled * np.sqrt(1/n1 + 1/n2))
+
                 df = n1 + n2 - 2
-                critical_value = t.ppf(1 - 0.025, df)
-                
-                t_test_result = {
-                    'Analyte': analyte,
-                    'Concentration1': concentration1,
-                    'Concentration2': concentration2,
-                    'T-statistic': t_stat,
-                    'Critical value': critical_value,
-                    'Significant': abs(t_stat) > critical_value
-                }
-                
-                t_test_results.append(t_test_result)
-        
+                crit = t.ppf(1 - 0.025, df) if df > 0 else np.nan
+
+                t_test_results.append({
+                    'Analyte'       : analyte,      # use analyte_name
+                    'Concentration1': c1,
+                    'Concentration2': c2,
+                    'T-statistic'   : t_stat,
+                    'Critical value': crit,
+                    'Significant'   : abs(t_stat) > crit if not np.isnan(crit) else False
+                })
+
         return t_test_results
 
     # Main execution using the new loader:
@@ -403,7 +490,7 @@ def Analysis_DPV(file_path, blank_responses=None, metadata_fields=None):
     if headers is None or data_array is None or parsed_metadata is None:
         return None
     else:
-        results = find_peaks_and_process_data(headers, data_array, parsed_metadata)
+        results = find_peaks_and_process_data(headers, data_array, parsed_metadata, peak_regions)
         cov_peak_currents, mean_peak_currents, std_peak_currents = calculate_cov_peak_currents(results)
         lod_results = calculate_lod(mean_peak_currents, blank_responses)
         t_test_results = perform_t_tests(mean_peak_currents, std_peak_currents)
